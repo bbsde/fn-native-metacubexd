@@ -1,0 +1,13 @@
+{
+  ".url": {
+    "metacubexd.dashboard": {
+      "title": "MetaCubeXD",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "gatewayPrefix": "/app/metacubexd",
+      "gatewaySocket": "app.sock",
+      "url": "/app/metacubexd/",
+      "allUsers": false
+    }
+  }
+}

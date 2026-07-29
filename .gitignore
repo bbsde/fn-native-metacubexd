@@ -1,0 +1,51 @@
+# ===== 构建产物 / 二进制（不入库）=====
+
+# fpk 打包产物
+*.fpk
+
+# Go 构建产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# metacubexd 编译产物（server / ui 静态资源，由 build.sh 生成）
+src/app/server/
+src/app/www/
+src/app/bin/
+
+# dist 产物目录
+dist/
+
+# ===== develop/ 构建环境中间产物（NAS 构建时下载/生成，不入库）=====
+
+# gh-mirror 下载产物（源码包、内核压缩包等，统一放 download/）
+develop/download/
+
+# 下载的归档（兼容旧位置残留：脚本早期版本下载到 develop/ 根，现归 download/）
+develop/metacubexd-*.tar.gz
+develop/mihomo-*.gz
+
+# metacubexd 源码（解包自 download/ 下的源码包）
+develop/metacubexd/
+
+# gh-mirror 运行时缓存（测速结果等）
+develop/.gh_mirror
+develop/.gh_mirror.*
+
+# gh-mirror 镜像配置（含 token，敏感）
+develop/mirrors.json
+
+# 构建日志
+develop/build.log
+
+# ===== 编辑器 / 工具 =====
+
+# ZCode agent workspace
+.zcode/
+
+# 日志
+*.log

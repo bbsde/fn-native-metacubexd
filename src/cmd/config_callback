@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# MetaCubeXD fnOS 应用 - 配置回调
+# 新架构下订阅管理完全由面板 Profiles 页面处理，fnOS 向导无需收集任何字段。
+# secret 由 cmd/main 启动时自动生成随机值，无需用户配置。
+# 此回调保留为空实现（fnOS 框架约定文件）。
+
+: "${TRIM_TEMP_LOGFILE:=/dev/null}"
+exit 0

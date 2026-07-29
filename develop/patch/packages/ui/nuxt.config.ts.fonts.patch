@@ -1,0 +1,22 @@
+diff --git a/packages/ui/nuxt.config.ts b/packages/ui/nuxt.config.ts
+--- a/packages/ui/nuxt.config.ts
++++ b/packages/ui/nuxt.config.ts
+@@ -1,9 +1,17 @@
+   // Fonts configuration - using Ubuntu font
++  // fnOS: 构建机无法访问 fonts.google.com（被墙），改用 bunny 镜像并禁用 google
++  // provider 初始化。仅改 family 的 provider 不够——@nuxt/fonts 经 fontless/unifont
++  // 仍会初始化 google/googleicons provider 去 metadata，导致构建卡在 connect timeout。
++  // 显式 providers.google=false 才能真正跳过（见 nuxt/fonts#644）。
+   fonts: {
++    providers: {
++      google: false,
++      googleicons: false,
++    },
+     families: [
+       {
+         name: 'Ubuntu',
+-        provider: 'google',
++        provider: 'bunny',
+         weights: [300, 400, 500, 700],
+         styles: ['normal', 'italic'],
+       },

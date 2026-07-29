@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# MetaCubeXD fnOS 应用 - 升级回调
+# fpk 升级后重新下载源码 + 构建 metacubexd（新版面板/agent），保留用户数据。
+# DATA_DIR（profiles/active.yaml/geoip）和 PKGVAR/mihomo 不受影响。
+
+export PATH=/var/apps/nodejs_v24/target/bin:$PATH
+export HOME="${TRIM_PKGVAR}"
+export COREPACK_HOME="${TRIM_PKGVAR}/.corepack"
+corepack prepare pnpm@10.34.1 --activate 2>>"$DEBUG_LOG" || true
+
+GH_MIRROR="${TRIM_APPDEST}/bin/gh-mirror"
+DATA_DIR="${TRIM_DATA_SHARE_PATHS%%:*}"
+DEBUG_LOG="${TRIM_PKGVAR}/debug.log"
+SRC_DIR="${TRIM_APPDEST}/metacubexd-src"
+PATCH_DIR="${TRIM_APPDEST}/patch"
+: "${TRIM_TEMP_LOGFILE:=/dev/null}"
+
+log_debug() {
+  mkdir -p "$(dirname "$DEBUG_LOG")" 2>/dev/null
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [upgrade] $1" >> "$DEBUG_LOG" 2>/dev/null
+}
+
+log_debug "==== MetaCubeXD 升级回调开始 ===="
+
+chmod +x "$GH_MIRROR" 2>/dev/null
+mkdir -p "$TRIM_PKGVAR" "$DATA_DIR"
+
+if ! command -v corepack >/dev/null 2>&1; then
+  log_debug "⚠ corepack 不可用，跳过面板更新（保留旧版本）"
+  exit 0
+fi
+
+# 下载源码
+SRC_TGZ="${TRIM_PKGVAR}/.metacubexd-src.tgz"
+if ! "$GH_MIRROR" download \
+  "MetaCubeX/metacubexd/archive/refs/heads/main.tar.gz" \
+  -o "$SRC_TGZ" -min-size 100000 -pkgvar "$TRIM_PKGVAR" 2>>"$DEBUG_LOG"; then
+  log_debug "⚠ 源码下载失败，保留旧版本"
+  exit 0
+fi
+
+rm -rf "$SRC_DIR"
+mkdir -p "$SRC_DIR"
+tar xzf "$SRC_TGZ" -C "$SRC_DIR" --strip-components=1
+rm -f "$SRC_TGZ"
+
+# 构建（用 corepack pnpm 确保版本匹配 metacubexd 的 packageManager 字段）
+cd "$SRC_DIR" || { log_debug "⚠ 无法进入源码目录"; exit 0; }
+export npm_config_registry="https://registry.npmmirror.com"
+export npm_config_store_dir="${TRIM_PKGVAR}/.pnpm-store"
+if ! corepack pnpm install --frozen-lockfile 2>>"$DEBUG_LOG"; then
+  log_debug "⚠ pnpm install 失败，保留旧版本"; exit 0
+fi
+
+# 预置字体缓存
+if [ -f "${PATCH_DIR}/nuxt-fonts-cache.tgz" ]; then
+  mkdir -p packages/ui/node_modules/.cache
+  tar xzf "${PATCH_DIR}/nuxt-fonts-cache.tgz" -C packages/ui/node_modules/.cache 2>>"$DEBUG_LOG"
+fi
+
+if ! corepack pnpm --filter @metacubexd/ui generate 2>>"$DEBUG_LOG"; then
+  log_debug "⚠ UI 构建失败，保留旧版本"; exit 0
+fi
+if ! corepack pnpm --filter @metacubexd/server... build 2>>"$DEBUG_LOG"; then
+  log_debug "⚠ server 构建失败，保留旧版本"; exit 0
+fi
+
+# 替换产物
+rm -rf "${TRIM_APPDEST}/server" "${TRIM_APPDEST}/ui-dist"
+mkdir -p "${TRIM_APPDEST}/server" "${TRIM_APPDEST}/ui-dist"
+cp -r "${SRC_DIR}/apps/server/.output" "${TRIM_APPDEST}/server/.output"
+cp -r "${SRC_DIR}/packages/ui/.output/public/." "${TRIM_APPDEST}/ui-dist/"
+node "${PATCH_DIR}/patch-html.cjs" "${TRIM_APPDEST}/ui-dist" "/app/metacubexd" 2>>"$DEBUG_LOG"
+node "${PATCH_DIR}/patch-html.cjs" "${TRIM_APPDEST}/server/.output/public" "/app/metacubexd" 2>>"$DEBUG_LOG"
+rm -rf "$SRC_DIR"
+
+# 注入 clash-proxy
+node "${PATCH_DIR}/patch-index.cjs" "${TRIM_APPDEST}/server/.output" 2>>"$DEBUG_LOG" \
+  && log_debug "✓ clash-proxy 已注入" \
+  || log_debug "⚠ clash-proxy 注入失败"
+
+log_debug "✓ metacubexd 已更新"
+log_debug "==== MetaCubeXD 升级回调完成 ===="
+exit 0

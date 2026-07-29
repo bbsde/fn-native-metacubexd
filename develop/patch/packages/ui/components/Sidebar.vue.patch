@@ -1,0 +1,22 @@
+diff --git a/packages/ui/components/Sidebar.vue b/packages/ui/components/Sidebar.vue
+--- a/packages/ui/components/Sidebar.vue
++++ b/packages/ui/components/Sidebar.vue
+@@ -198,4 +198,16 @@
+   if (!window.confirm(t('restartCoreConfirm'))) return
+-  // #2057: refresh once the core is back so the UI reconnects to the new process.
+-  if (await configActions.restartBackendAPI()) window.location.reload()
++  // 托管模式（server/desktop，hasAgent）走 agent/supervisor 的 stop+start，
++  // 保证 mihomo 进程真正重启（新 PID）；纯 web dashboard 退回 mihomo 自带 /restart。
++  if (hasAgent.value) {
++    try {
++      await useControlApi().restartKernel()
++    } catch {
++      return
++    }
++    // #2057: refresh once the core is back so the UI reconnects to the new process.
++    window.location.reload()
++    return
++  }
++  // #2057: refresh once the core is back so the UI reconnects to the new process.
++  if (await configActions.restartBackendAPI()) window.location.reload()
+ }

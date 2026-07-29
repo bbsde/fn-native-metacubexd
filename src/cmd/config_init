@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# MetaCubeXD fnOS 应用 - 配置向导前置
+# 新架构无需用户输入任何字段（订阅在面板内管理，secret 自动生成），回显为空。
+
+exit 0

@@ -1,0 +1,161 @@
+#!/bin/bash
+
+# MetaCubeXD fnOS 应用 - 进程管理
+# cmd/main 只负责拉起 Node server；mihomo 由 server 内部 supervisor fork 管理。
+# 信号联动：fnOS stop -> 杀 Node server -> server 退出 -> tree-kill 带走 mihomo 子进程。
+#
+# 架构：
+#   fnOS 统一网关 -> app.sock -> Node server（Nitro）
+#                                       ├─ supervisor fork mihomo 子进程
+#                                       ├─ /api/control/*  -> agent router
+#                                       ├─ /clash-api/*     -> 反代到 mihomo:9090
+#                                       └─ 静态面板资源
+
+# nodejs_v24 运行时
+export PATH=/var/apps/nodejs_v24/target/bin:$PATH
+# app 用户 home 目录可能不存在，兜底到 PKGVAR（node 运行时需要 HOME 写缓存）
+export HOME="${TRIM_PKGVAR}"
+
+APPSHARE_DIR="${TRIM_DATA_SHARE_PATHS%%:*}"
+DATA_DIR="$APPSHARE_DIR/config"
+MIHOMO_BIN="$APPSHARE_DIR/bin/mihomo"
+APP_DIR="${TRIM_APPDEST}/server"
+SOCKET_PATH="${TRIM_APPDEST}/app.sock"
+LOG_FILE="${TRIM_PKGVAR}/metacubexd.log"
+PID_FILE="${TRIM_PKGVAR}/metacubexd.pid"
+DEBUG_LOG="${TRIM_PKGVAR}/debug.log"
+# TRIM_TEMP_LOGFILE 是 fnOS 给错误信息显示用的临时文件；SSH 手动调试时可能为空，兜底
+: "${TRIM_TEMP_LOGFILE:=/dev/null}"
+
+log_msg() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
+log_debug() {
+  mkdir -p "$(dirname "$DEBUG_LOG")" 2>/dev/null
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [main] $1" >> "$DEBUG_LOG" 2>/dev/null
+}
+check_process() { local pid="$1"; [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; }
+
+status_app() {
+  if [ -f "$PID_FILE" ]; then
+    local pid; pid="$(head -n 1 "$PID_FILE" | tr -d '[:space:]')"
+    if [ -n "$pid" ] && check_process "$pid"; then return 0; fi
+    rm -f "$PID_FILE"
+  fi
+  return 1
+}
+
+# 生成随机 token（若不存在），用于 agent /api/control 鉴权
+gen_token() {
+  local file="$1"
+  if [ ! -f "$file" ]; then
+    head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32 > "$file"
+    chmod 600 "$file"
+  fi
+  cat "$file"
+}
+
+start_app() {
+  if status_app; then log_debug "已在运行 PID=$(cat "$PID_FILE" 2>/dev/null)"; return 0; fi
+  log_debug "---- 启动 MetaCubeXD server ----"
+
+  # 前置检查
+  if ! command -v node >/dev/null 2>&1; then
+    echo "nodejs_v24 未安装或 PATH 未配置" > "$TRIM_TEMP_LOGFILE"
+    log_debug "✗ node 不在 PATH 中（nodejs_v24 未安装？）"; exit 1
+  fi
+  local server_mjs="${APP_DIR}/index.mjs"
+  if [ ! -f "$server_mjs" ]; then
+    echo "server 产物缺失（${server_mjs}），请重新安装应用" > "$TRIM_TEMP_LOGFILE"
+    log_debug "✗ server 产物缺失"; exit 1
+  fi
+  if [ ! -f "$MIHOMO_BIN" ]; then
+    echo "mihomo 内核缺失（${MIHOMO_BIN}），请重新安装应用" > "$TRIM_TEMP_LOGFILE"
+    log_debug "✗ mihomo 二进制缺失"; exit 1
+  fi
+
+  # 生成鉴权 token（首次启动自动生成，后续复用）
+  mkdir -p "$TRIM_PKGVAR"
+  local control_token clash_secret
+  control_token=$(gen_token "${TRIM_PKGVAR}/.control_token")
+  clash_secret=$(gen_token "${TRIM_PKGVAR}/.clash_secret")
+
+  # 确保 mihomo 可执行 + 数据目录存在
+  chmod +x "$MIHOMO_BIN" 2>/dev/null
+  mkdir -p "$DATA_DIR"
+
+  # 清理残留 socket
+  rm -f "$SOCKET_PATH"
+
+  # 设置 server 运行时环境变量
+  export NODE_ENV=production
+  export DATA_DIR="$DATA_DIR"
+  export MIHOMO_BIN="$MIHOMO_BIN"
+  export UI_DIST="${TRIM_APPDEST}/www"
+  export CONTROL_PORT=8080
+  export CLASH_API_PORT=9090
+  export MIXED_PORT=7890
+  export CONTROL_TOKEN="$control_token"
+  export CLASH_SECRET="$clash_secret"
+  export DEFAULT_BACKEND_URL="/app/metacubexd/clash-api"
+  export GATEWAY_PREFIX="/app/metacubexd"
+  export PORT=$CONTROL_PORT
+  # fnOS 统一网关前缀：让 Nitro 自动剥掉 /app/metacubexd 前缀再交给路由
+  # （Nitro applyEnv 机制：NITRO_APP_BASE_URL 覆盖 runtimeConfig.app.baseURL）
+  export NITRO_APP_BASE_URL="/app/metacubexd"
+  # 让 Nitro 监听 Unix Socket（fnOS 统一网关要求）
+  # Nitro node-server 用 NITRO_UNIX_SOCKET 环境变量（见 nitro.mjs: process.env.NITRO_UNIX_SOCKET）
+  export NITRO_UNIX_SOCKET="$SOCKET_PATH"
+
+  log_debug "node: $(node -v 2>/dev/null)"
+  log_debug "APP_DIR=${APP_DIR}"
+  log_debug "DATA_DIR=${DATA_DIR}"
+  log_debug "MIHOMO_BIN=${MIHOMO_BIN}"
+  log_debug "UI_DIST=${UI_DIST}"
+
+  # 启动 Node server
+  log_msg "Starting MetaCubeXD server..."
+  cd "$APP_DIR" || { echo "无法进入 $APP_DIR" > "$TRIM_TEMP_LOGFILE"; exit 1; }
+  node index.mjs >> "$LOG_FILE" 2>&1 &
+  echo "$!" > "$PID_FILE"
+  log_debug "server PID=$(cat "$PID_FILE")"
+
+  # 等待启动（Nitro + mihomo fork 需要几秒）
+  sleep 3
+  if ! status_app; then
+    echo "MetaCubeXD server 启动失败，请检查日志: $LOG_FILE" > "$TRIM_TEMP_LOGFILE"
+    log_debug "✗ server 进程已退出"
+    tail -20 "$LOG_FILE" 2>/dev/null | while read -r l; do log_debug "  server: $l"; done
+    exit 1
+  fi
+  log_msg "MetaCubeXD server started (PID $(cat "$PID_FILE"))"
+  log_debug "✓ 启动成功"
+}
+
+stop_app() {
+  log_msg "Stopping MetaCubeXD server..."
+  log_debug "---- 停止 ----"
+  if [ ! -f "$PID_FILE" ]; then log_debug "无 PID 文件"; return 0; fi
+  local pid; pid="$(head -n 1 "$PID_FILE" | tr -d '[:space:]')"
+  if [ -z "$pid" ] || ! check_process "$pid"; then rm -f "$PID_FILE"; log_debug "进程已不在"; return 0; fi
+
+  # SIGTERM -> server 退出 -> supervisor 的 exit handler 用 tree-kill 杀 mihomo 子进程
+  kill -TERM "$pid" 2>> "$LOG_FILE" || true
+  log_debug "SIGTERM 已发送给 server"
+  local count=0
+  while check_process "$pid" && [ "$count" -lt 15 ]; do sleep 1; count=$((count + 1)); done
+  if check_process "$pid"; then
+    kill -KILL "$pid" 2>> "$LOG_FILE" || true
+    log_debug "SIGKILL（mihomo 子进程可能残留）"
+    # 兜底：杀残留 mihomo 进程
+    pkill -f "$MIHOMO_BIN" 2>/dev/null || true
+  fi
+  rm -f "$PID_FILE" "$SOCKET_PATH"
+  log_msg "MetaCubeXD server stopped"
+  log_debug "✓ 已停止"
+}
+
+case "$1" in
+  start) start_app ;;
+  stop) stop_app ;;
+  status) if status_app; then exit 0; fi; exit 3 ;;
+  *) echo "Unknown command: $1" > "$TRIM_TEMP_LOGFILE"; exit 1 ;;
+esac

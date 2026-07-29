@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# MetaCubeXD fnOS 应用 - 安装回调
+#
+# fpk 已含编译产物（server/www）和 mihomo 内核，install_callback 只需：
+#   1. 创建 appshare 目录结构（bin/、config/profiles/）
+#   2. 复制 mihomo 到 appshare/bin（target/bin/mihomo -> appshare/bin/mihomo）
+#
+# 运行时数据（active.yaml、profiles、geoip 等）由 server/mihomo 自动写入 appshare/config。
+
+: "${TRIM_TEMP_LOGFILE:=/dev/null}"
+
+APPSHARE_DIR="${TRIM_DATA_SHARE_PATHS%%:*}"
+SRC_MIHOMO="${TRIM_APPDEST}/bin/mihomo"
+DST_MIHOMO="${APPSHARE_DIR}/bin/mihomo"
+
+# 创建目录结构
+mkdir -p "${APPSHARE_DIR}/bin"
+mkdir -p "${APPSHARE_DIR}/config/profiles"
+
+# 复制 mihomo 到 appshare/bin
+if [ -f "$SRC_MIHOMO" ]; then
+  cp -f "$SRC_MIHOMO" "$DST_MIHOMO"
+  chmod +x "$DST_MIHOMO"
+else
+  echo "mihomo 内核缺失: $SRC_MIHOMO" > "$TRIM_TEMP_LOGFILE"
+  exit 1
+fi
+
+exit 0

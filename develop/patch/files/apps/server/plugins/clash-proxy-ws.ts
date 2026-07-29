@@ -1,13 +1,10 @@
 // Clash API WebSocket 反代插件：把 /clash-api/* 的 WebSocket 升级请求透传到 mihomo:9090。
 //
-// fnOS 统一网关下浏览器无法直连 mihomo 的 9090，实时流量图/连接列表/日志
-// 走 WebSocket，需要在 server 的 http.Server 上注册 upgrade 事件。
-//
-// Nitro 2.13.4 的 node-server preset 在 unix socket 模式下 return 跳过了
-// 后续初始化，且不存在 listen:node hook。用 http.Server.prototype.listen
-// monkey-patch 捕获 server 实例。
+// Nitro 2.13.4 的 node-server preset 在 unix socket 模式下 return 跳过了后续初始化。
+// 用 http.Server.prototype.listen monkey-patch 捕获 server 实例。
 
 import { createConnection } from 'node:net'
+import { Server as HttpServer } from 'node:http'
 
 const CLASH_API_PORT = parseInt(process.env.CLASH_API_PORT || '9090', 10)
 const CLASH_SECRET = process.env.CLASH_SECRET || ''
@@ -59,14 +56,11 @@ function registerUpgrade(server: any) {
 }
 
 export default defineNitroPlugin(() => {
-  // Nitro 插件先于 server.listen 执行。monkey-patch http.Server.prototype.listen，
-  // 在第一次 listen 调用时拿到 server 实例并注册 upgrade 事件，然后恢复原始方法。
-  const http = require('node:http')
-  const originalListen = http.Server.prototype.listen
-  http.Server.prototype.listen = function (this: any, ...args: any[]) {
+  const originalListen = HttpServer.prototype.listen
+  HttpServer.prototype.listen = function (this: any, ...args: any[]) {
     const result = originalListen.apply(this, args as any)
     registerUpgrade(this)
-    http.Server.prototype.listen = originalListen
+    HttpServer.prototype.listen = originalListen
     return result
   } as any
 })

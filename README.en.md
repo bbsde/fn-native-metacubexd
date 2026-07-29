@@ -1,67 +1,111 @@
-# fn-native-mihomo
+<div align="center">
 
-<p align="center">
-  <img src="ICON_256.PNG" width="128" height="128" alt="Mihomo">
-</p>
+<img src="src/ICON.PNG" width="128" height="128" alt="MetaCubeXD">
 
-<p align="center">
-  <a href="https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.29"><img alt="Kernel" src="https://img.shields.io/badge/kernel-v1.19.29-blue"></a>
-  <img alt="Platform" src="https://img.shields.io/badge/platform-fnOS%20x86__64-green">
-  <img alt="Dashboard" src="https://img.shields.io/badge/dashboard-MetaCubeXD-orange">
-</p>
+# fn-native-metacubexd
 
-A native Feiniu fnOS app based on [Mihomo](https://github.com/MetaCubeX/mihomo) (the Clash.Meta kernel), with the [MetaCubeXD](https://github.com/MetaCubeX/metacubexd) dashboard bundled in. Ready to use out of the box and compatible with Clash subscription configs.
+A native Feiniu fnOS app built on [MetaCubeXD](https://github.com/MetaCubeX/metacubexd)'s full-xd architecture, with the [Mihomo](https://github.com/MetaCubeX/mihomo) (Clash.Meta) kernel bundled in.
+
+It supports multi-subscription management, visual config editing, and one-click kernel start/stop/restart.
+
+[![Dashboard](https://img.shields.io/badge/dashboard-MetaCubeXD%20v1.270.6-orange)](https://github.com/MetaCubeX/metacubexd/releases)
+[![Kernel](https://img.shields.io/badge/kernel-mihomo%20v1.19.29-blue)](https://github.com/MetaCubeX/mihomo/releases)
+[![Platform](https://img.shields.io/badge/platform-fnOS%20x86__64-green)](#)
+
+**[Features](#-features) · [Installation](#-installation) · [Usage](#-usage) · [Development](#-development--build) · [Architecture](#-architecture) · [Changelog](CHANGELOG.md)**
+
+</div>
+
+---
 
 ## ✨ Features
 
-- 🔌 **Comprehensive protocols**: VMess, VLESS, Shadowsocks, Trojan, Snell, TUIC, Hysteria, anytls, shadowquic, and more
-- 🛡️ **Local proxies**: built-in HTTP / HTTPS / SOCKS server with authentication support
-- 🌐 **Smart DNS**: built-in DNS server with DoH / DoT upstream and Fake-IP to mitigate DNS pollution
-- 📋 **Flexible rules**: route traffic to different nodes based on domain, GEOIP, IPCIDR, or process
-- 🔀 **Remote groups**: automatic fallback, load balancing, or latency-based auto selection
-- ☁️ **Remote providers**: fetch node lists remotely instead of hard-coding them in config
-- 🎛️ **Visual dashboard**: MetaCubeXD bundled for intuitive node management and real-time traffic/connection monitoring
-- 🔌 **Open API**: full HTTP RESTful API controller
+- 🗂️ **Multi-subscription management**: import multiple subscriptions and switch with one click; supports merging/stacking and script transformation
+- ✏️ **Visual config editing**: Monaco YAML editor + graphical config editor
+- 🔄 **Kernel management**: start / stop / restart / roll back the mihomo kernel from the dashboard
+- ⏰ **Auto subscription update**: each subscription has its own configurable refresh interval
+- 📊 **Real-time monitoring**: live charts for traffic, connections, and logs (WebSocket)
+- 🔌 **Comprehensive protocols**: VMess, VLESS, Shadowsocks, Trojan, TUIC, Hysteria, anytls, shadowquic, and more
+- 🌐 **Unified gateway**: routes through the fnOS unified gateway; supports remote (frp / FN Connect) WebSocket
+- 🔑 **No credential entry**: open the dashboard directly from the fnOS app window — no need to enter the mihomo address or password
 
 ## 📦 Installation
 
-1. Download the latest `.fpk` package from the [Releases](../../../../rexond/fn-native-mihomo/releases) page
-2. On the fnOS desktop, open **App Center** → **Local Install** and upload the `.fpk` file
-3. Fill in the setup wizard:
-   - **Subscription URL**: your Clash subscription link (starting with `http://` or `https://`)
-   - **Dashboard password**: used to access the MetaCubeXD dashboard
-4. After installation, open **Mihomo** on the desktop to enter the dashboard
+1. Make sure the **Node.js v24** runtime (`nodejs_v24`) is installed from the fnOS App Store
+2. Download the latest `.fpk` package from the [Releases](../../releases) page
+3. On the fnOS desktop, open **App Center** → **Local Install** and upload the `.fpk` file
+4. Wait for the installation to finish (it downloads the source from GitHub and builds locally, which takes a few minutes)
+5. Open **MetaCubeXD** on the desktop and import your subscription URL on the "Subscriptions" page to get started
 
 ## 🚀 Usage
 
-- **Dashboard**: click the Mihomo icon on the desktop, or browse to `http://<NAS-IP>:9090/ui`
-- **Local proxy port**: default mixed port `7890` (HTTP/SOCKS shared), configurable in the dashboard
-- **API port**: `9090`; the dashboard password is also the API secret
-- **Config file**: located at the shared folder `mihomo/config/config.yaml`, also editable from the dashboard
+- **Dashboard**: click the MetaCubeXD icon on the desktop — it enters the dashboard automatically, no address or password needed
+- **Subscription management**: import subscription URLs on the "Subscriptions" page; supports switching between multiple subscriptions
+- **Local proxy port**: default mixed port `7890` (HTTP / SOCKS shared)
+- **Config file**: located in the shared folder `metacubexd/config/`; also editable from the dashboard
 
 ## 🏗️ Project Structure
 
 ```
 .
-├── app/                  # Runtime assets: mihomo kernel, dashboard, GeoIP db, UI
-├── cmd/                  # App lifecycle scripts (install/uninstall/upgrade/config hooks)
-├── config/               # Privilege and shared-resource declarations
-├── wizard/               # Install and config wizards
-├── develop/              # Dev tooling (build, upstream auto-update scripts)
-└── manifest              # App manifest (version, ports, description, ...)
+├── src/                     # fnOS app (fnpack build target)
+│   ├── manifest             #   App manifest (version, ports, description, ...)
+│   ├── cmd/                 #   Lifecycle scripts (install / upgrade / config / main)
+│   ├── config/              #   Privilege and shared-resource declarations
+│   ├── wizard/              #   Install / config wizards
+│   ├── app/                 #   Runtime assets (generated at build time)
+│   │   ├── server/          #     Node server build output (Nitro)
+│   │   ├── www/             #     Dashboard static assets
+│   │   ├── bin/             #     mihomo kernel binary
+│   │   └── ui/              #     Desktop entry config + icons
+│   ├── ICON.PNG             #   App icon
+│   └── ICON_256.PNG
+└── develop/                 # Development & build environment
+    ├── build.sh             #   One-shot build script (detect → download → patch → build → pack)
+    ├── gh-mirror            #   GitHub mirror download helper (Go, reusable)
+    ├── mirrors.json         #   Mirror source config
+    ├── patch/               #   Upstream source patches + new files
+    ├── versions             #   Upstream version records (mihomo / metacubexd)
+    └── ICON.ai              #   Icon source file
 ```
+
+> `src/app/server/`, `src/app/www/`, and `src/app/bin/` are generated by `build.sh` at build time and are listed in `.gitignore`, so they are not committed to the repo.
 
 ## 🔧 Development & Build
 
-```bash
-# Update upstream deps (mihomo kernel / dashboard / GeoIP db)
-cd develop && sh update.sh
+Building must be done on a fnOS environment (the NAS) and depends on the `nodejs_v24` runtime and Go (only needed the first time to compile gh-mirror).
 
-# Build the .fpk package
-cd develop && sh build.sh
+```bash
+# Build the .fpk: automatically handles version detection, source/kernel download,
+# patching, server/ui compilation, and fnpack packaging
+cd develop && bash build.sh
 ```
 
-Upstream dependencies are checked and pulled automatically by `develop/update.sh`; versions are recorded in `develop/versions`, and the Mihomo kernel version is synced to `manifest`.
+Full `build.sh` workflow:
+
+1. Inject PATH (`nodejs_v24` node/pnpm + gh-mirror)
+2. Detect the metacubexd version; download source on demand and establish a git baseline
+3. Detect the mihomo version; download the kernel on demand
+4. `pnpm install` dependencies
+5. Apply patches under `patch/` and copy new files from `patch/files`
+6. Build the server (Nitro) and ui; output artifacts to `src/app/`
+7. Sync the manifest version and package with `fnpack` into `dist/`
+
+## 🏛️ Architecture
+
+```
+fnOS app window
+  └─> fnOS unified gateway (verifies login state)
+       └─> /app/metacubexd/* ──> app.sock
+            └─> Node server (metacubexd full-xd architecture)
+                 ├─ supervisor forks the mihomo child process
+                 ├─ /api/control/*  ──> agent (multi-subscription / kernel management)
+                 ├─ /clash-api/*     ──> reverse proxy to mihomo:9090 (HTTP + WS)
+                 └─ static dashboard assets
+```
+
+`cmd/main` only launches the Node server; mihomo is forked and managed by an internal supervisor within the server.
+On stop: fnOS → kills the Node server → supervisor exits → tree-kill takes down the mihomo child process.
 
 ## 🤝 Contributing
 
@@ -73,9 +117,13 @@ Upstream dependencies are checked and pulled automatically by `develop/update.sh
 ## 📝 Acknowledgements
 
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — the Mihomo (Clash.Meta) kernel
-- [MetaCubeX/metacubexd](https://github.com/MetaCubeX/metacubexd) — the MetaCubeXD dashboard
+- [MetaCubeX/metacubexd](https://github.com/MetaCubeX/metacubexd) — the MetaCubeXD dashboard + agent
 - [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) — GeoIP and rule data
 
 ## ⚖️ License
 
 This project is a third-party packaging for Feiniu fnOS only. Copyright of the kernel and dashboard belongs to their upstream projects and follows their respective open-source licenses. Please comply with local laws and regulations when using this tool; this project is not responsible for any misuse.
+
+---
+
+**中文** · [中文 README](README.md)

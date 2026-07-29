@@ -4,11 +4,11 @@
 
 # fn-native-metacubexd
 
-[MetaCubeXD](https://github.com/MetaCubeX/metacubexd) 全 xd 架构的飞牛 fnOS 原生应用，内置 [Mihomo](https://github.com/MetaCubeX/mihomo)（Clash.Meta）内核。
+[魔方面板](https://github.com/MetaCubeX/metacubexd) —— 飞牛 fnOS 原生代理面板，内置 [Mihomo](https://github.com/MetaCubeX/mihomo)（Clash.Meta）内核。
 
-支持多订阅管理、可视化配置编辑、内核一键启停重启。
+面板 + 内核一体化运行，支持多订阅管理、可视化配置编辑、内核一键启停重启。
 
-[![面板](https://img.shields.io/badge/面板-MetaCubeXD%20v1.270.6-orange)](https://github.com/MetaCubeX/metacubexd/releases)
+[![面板](https://img.shields.io/badge/面板-v1.270.6-orange)](https://github.com/MetaCubeX/metacubexd/releases)
 [![内核](https://img.shields.io/badge/内核-mihomo%20v1.19.29-blue)](https://github.com/MetaCubeX/mihomo/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20x86__64-green)](#)
 
@@ -35,11 +35,11 @@
 2. 从 [发行版（Releases）](../../releases) 下载最新的 `.fpk` 安装包
 3. 登录飞牛 fnOS 桌面 → **应用中心** → **本地安装**，上传 `.fpk` 文件
 4. 等待安装完成（会从 GitHub 下载源码并构建，需要几分钟）
-5. 在桌面打开 **MetaCubeXD**，在「订阅」页面导入订阅地址即可开始使用
+5. 在桌面打开 **魔方面板**，在「订阅」页面导入订阅地址即可开始使用
 
 ## 🚀 使用
 
-- **管理面板**：桌面点击 MetaCubeXD 图标，自动进入面板，无需输入地址密码
+- **管理面板**：桌面点击魔方面板图标，自动进入面板，无需输入地址密码
 - **订阅管理**：在面板「订阅」页面导入订阅 URL，支持多订阅切换
 - **本地代理端口**：默认混合端口 `7890`（HTTP / SOCKS 共用）
 - **配置文件**：位于共享目录 `metacubexd/config/`，也可通过面板编辑
@@ -116,7 +116,7 @@ cd develop && bash build.sh
 ## 📝 致谢
 
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — Mihomo（Clash.Meta）内核
-- [MetaCubeX/metacubexd](https://github.com/MetaCubeX/metacubexd) — MetaCubeXD 面板 + agent
+- [MetaCubeX/metacubexd](https://github.com/MetaCubeX/metacubexd) — 魔方面板上游 + agent
 - [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) — GeoIP 与规则库
 
 ## ⚖️ 许可

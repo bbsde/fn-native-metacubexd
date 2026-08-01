@@ -215,12 +215,22 @@ EOF
     local release_id
     release_id=$(echo "$release_data" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
     
-    # 上传 fpk 文件（Gitee API 不支持直接上传资产，需要手动上传）
+    # 上传 fpk 文件
     log "上传 fpk 文件..."
-    log "⚠ Gitee API 不支持直接上传 Release 资产，请手动上传："
-    log "  https://gitee.com/rexond/fn-native-metacubexd/releases/new?tag=v${latest_xd}"
-    log "  上传文件: $fpk_path"
-    log "✓ Gitee Release 已创建 (v${latest_xd})"
+    local asset_result
+    asset_result=$(curl -sL --max-time 180 -X POST \
+        -H "Authorization: Bearer $GITEE_TOKEN" \
+        -F "file=@$fpk_path" \
+        "https://gitee.com/api/v5/repos/rexond/fn-native-metacubexd/releases/$release_id/attach_files?access_token=$GITEE_TOKEN" \
+        2>/dev/null)
+    
+    if echo "$asset_result" | grep -q 'browser_download_url'; then
+        log "✓ fpk 已上传到 Gitee Release (v${tag})"
+    else
+        log "⚠ fpk 上传可能失败: $asset_result"
+    fi
+    
+    log "✓ Gitee Release 创建完成 (v${tag})"
 }
 
 # sed 原地替换（兼容 GNU/BSD）

@@ -8,7 +8,7 @@
 
 面板 + 内核一体化运行，支持多订阅管理、可视化配置编辑、内核一键启停重启。
 
-[![面板](https://img.shields.io/badge/面板-v1.270.6-orange)](https://github.com/MetaCubeX/metacubexd/releases)
+[![面板](https://img.shields.io/badge/面板-v1.271.0-orange)](https://github.com/MetaCubeX/metacubexd/releases)
 [![内核](https://img.shields.io/badge/内核-mihomo%20v1.19.29-blue)](https://github.com/MetaCubeX/mihomo/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20x86__64-green)](#)
 

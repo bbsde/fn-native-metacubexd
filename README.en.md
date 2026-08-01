@@ -8,7 +8,7 @@ A native Feiniu fnOS proxy dashboard built on [MetaCubeXD](https://github.com/Me
 
 The dashboard and kernel run as a single process, supporting multi-subscription management, visual config editing, and one-click kernel start/stop/restart.
 
-[![Dashboard](https://img.shields.io/badge/dashboard-v1.270.6-orange)](https://github.com/MetaCubeX/metacubexd/releases)
+[![Dashboard](https://img.shields.io/badge/dashboard-v1.271.0-orange)](https://github.com/MetaCubeX/metacubexd/releases)
 [![Kernel](https://img.shields.io/badge/kernel-mihomo%20v1.19.29-blue)](https://github.com/MetaCubeX/mihomo/releases)
 [![Platform](https://img.shields.io/badge/platform-fnOS%20x86__64-green)](#)
 

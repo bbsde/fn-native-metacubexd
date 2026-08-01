@@ -4,7 +4,26 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
-当前打包版本：**面板 metacubexd `v1.270.6`** ＋ **内核 mihomo `v1.19.29`**
+当前打包版本：**面板 metacubexd `v1.271.0`** ＋ **内核 mihomo `v1.19.29`**
+
+---
+
+## [1.271.0] - 2026-08-02
+
+面板 metacubexd [`v1.271.0`](https://github.com/MetaCubeX/metacubexd/releases/tag/v1.271.0) ＋ 内核 mihomo [`v1.19.29`](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.29)
+
+### 面板（metacubexd v1.271.0）
+
+#### 新特性
+
+- **proxies 页面**：新增移动端快捷置顶（[9ca5eb0](https://github.com/MetaCubeX/metacubexd/commit/9ca5eb065bfd49d8248d55754d6b7ed7deb54581)）
+
+#### 修复
+
+- **ui**：新增托管规则与代理的增删改查功能（[#2161](https://github.com/MetaCubeX/metacubexd/issues/2161)）
+- **ui**：修复移动端文档滚动时触发的 overscroll 问题（[a7c0497](https://github.com/MetaCubeX/metacubexd/commit/a7c049765970b91bcb17f7b46d5a38aec6805aa5)）
+
+> 完整更新记录见上游 [Release Notes](https://github.com/MetaCubeX/metacubexd/releases/tag/v1.271.0)。
 
 ---
 

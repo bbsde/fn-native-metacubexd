@@ -24,7 +24,7 @@ MIHOMO_REPO="MetaCubeX/mihomo"
 
 # 注入 PATH
 export PATH="/vol1/@appcenter/nodejs_v24/bin:$DEVELOP_DIR:$PATH"
-GH_MIRROR="$DEVELOP_DIR/gh-mirror"
+GH_PROXY="$DEVELOP_DIR/gh-proxy"
 
 # 颜色
 g() { printf '\033[32m%s\033[0m\n' "$1"; }
@@ -42,7 +42,7 @@ log() {
 # 获取上游最新版本
 get_latest_version() {
     local repo="$1"
-    "$GH_MIRROR" latest-tag "$repo" -pkgvar "$DEVELOP_DIR" 2>/dev/null | sed 's/^v//'
+    "$GH_PROXY" latest-tag "$repo" 2>/dev/null | sed 's/^v//'
 }
 
 # 读取本地版本

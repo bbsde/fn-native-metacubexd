@@ -36,12 +36,11 @@
 │   │   ├── ui/              #     桌面入口配置 + 图标（提交进仓库）
 │   │   ├── server/          #     ⚠️ 构建产物（.gitignore，不入库）
 │   │   ├── www/             #     ⚠️ 构建产物（.gitignore，不入库）
-│   │   └── bin/             #     ⚠️ mihomo + gh-mirror（.gitignore，不入库）
+│   │   └── bin/             #     ⚠️ mihomo（.gitignore，不入库）
 │   └── ICON.PNG / ICON_256.PNG
 ├── develop/                 # 开发与构建环境
 │   ├── build.sh             #   一键构建脚本（见下「打包流程」）
-│   ├── gh-mirror            #   GitHub 镜像加速下载工具（Go 二进制，可复用）
-│   ├── mirrors.json         #   ⚠️ 镜像源配置（含 token，已 gitignore）
+│   ├── gh-proxy             #   GitHub 镜像加速下载工具（Go 二进制，内嵌默认镜像源）
 │   ├── patch/               #   上游源码补丁 + 新增文件 —— fnOS 适配的核心
 │   └── versions             #   上游版本记录 —— ⚠️ 构建时自动更新
 ├── README.md / README.en.md # 中英文说明
@@ -63,9 +62,9 @@
 | 路径 | 脚本 | 执行位置 | 用途 |
 |------|------|---------|------|
 | **开发打包** | `develop/build.sh` | fnOS NAS（develop 目录） | 产出 `.fpk`，产物（server/www/bin）打进 fpk |
-| **升级重建** | `src/cmd/upgrade_callback` | fnOS NAS（用户升级时） | 升级时在 NAS 上重新拉源码 + 构建面板，**保留用户数据** |
+| **升级回调** | `src/cmd/upgrade_callback` | fnOS NAS（用户升级时） | **空实现** —— 面板产物随 fpk 部署自动覆盖，无需重建；运行时数据（profiles/active.yaml）在 appshare 不受影响 |
 
-两者都走 gh-mirror 下载 + 补丁 + pnpm 构建，但触发场景不同。修改构建逻辑时两处都要顾及。
+开发打包走 gh-proxy 下载 + 补丁 + pnpm 构建。升级回调现已是空壳，不再拉源码（新版面板直接打进 fpk，升级即生效）。
 
 ---
 
@@ -82,7 +81,7 @@ cd <repo>/develop && bash build.sh
 
 产物输出到 `dist/*.fpk`。构建前确认：
 - `nodejs_v24` 已从应用商店安装（`build.sh` 会注入其 PATH）
-- 首次构建若需重新编译 `gh-mirror`，需要 Go 环境（仓库已带预编译二进制 `develop/gh-mirror`，通常无需重编）
+- 首次构建若需重新编译 `gh-proxy`，需要 Go 环境（仓库已带预编译二进制 `develop/gh-proxy`，通常无需重编）
 
 ### build.sh 的七步流程
 
@@ -176,10 +175,10 @@ https://img.shields.io/badge/内核-mihomo%20v1.19.29-blue
 ### 1. 确认上游版本
 
 ```bash
-# 查看上游最新版本（在 NAS 上，用 gh-mirror）
+# 查看上游最新版本（在 NAS 上，用 gh-proxy）
 cd <repo>/develop
-./gh-mirror latest-tag MetaCubeX/metacubexd -pkgvar .
-./gh-mirror latest-tag MetaCubeX/mihomo -pkgvar .
+./gh-proxy latest-tag MetaCubeX/metacubexd
+./gh-proxy latest-tag MetaCubeX/mihomo
 ```
 
 确认与 `develop/versions` 是否一致；若上游有新版，准备更新。

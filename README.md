@@ -62,8 +62,7 @@
 │   └── ICON_256.PNG
 └── develop/                 # 开发与构建环境
     ├── build.sh             #   一键构建脚本（检测 → 下载 → 补丁 → 编译 → 打包）
-    ├── gh-mirror            #   GitHub 镜像加速下载工具（Go，可复用）
-    ├── mirrors.json         #   镜像源配置
+    ├── gh-proxy             #   GitHub 镜像加速下载工具（Go，内嵌默认镜像源）
     ├── patch/               #   上游源码补丁 + 新增文件
     ├── versions             #   上游版本记录（mihomo / metacubexd）
     └── ICON.ai              #   图标源文件
@@ -73,7 +72,7 @@
 
 ## 🔧 开发与构建
 
-构建需在 fnOS 环境（NAS）上进行，依赖 `nodejs_v24` 运行时和 Go（仅首次编译 gh-mirror 时需要）。
+构建需在 fnOS 环境（NAS）上进行，依赖 `nodejs_v24` 运行时和 Go（仅首次编译 gh-proxy 时需要）。
 
 ```bash
 # 打包 .fpk：自动完成版本检测、源码/内核下载、打补丁、编译 server/ui、fnpack 打包
@@ -82,7 +81,7 @@ cd develop && bash build.sh
 
 `build.sh` 完整流程：
 
-1. 注入 PATH（`nodejs_v24` 的 node/pnpm + gh-mirror）
+1. 注入 PATH（`nodejs_v24` 的 node/pnpm + gh-proxy）
 2. 检测 metacubexd 版本，按需下载源码并建立 git baseline
 3. 检测 mihomo 版本，按需下载内核
 4. `pnpm install` 安装依赖

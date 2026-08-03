@@ -62,8 +62,7 @@ The dashboard and kernel run as a single process, supporting multi-subscription 
 │   └── ICON_256.PNG
 └── develop/                 # Development & build environment
     ├── build.sh             #   One-shot build script (detect → download → patch → build → pack)
-    ├── gh-mirror            #   GitHub mirror download helper (Go, reusable)
-    ├── mirrors.json         #   Mirror source config
+    ├── gh-proxy             #   GitHub mirror download helper (Go, built-in default mirrors)
     ├── patch/               #   Upstream source patches + new files
     ├── versions             #   Upstream version records (mihomo / metacubexd)
     └── ICON.ai              #   Icon source file
@@ -73,7 +72,7 @@ The dashboard and kernel run as a single process, supporting multi-subscription 
 
 ## 🔧 Development & Build
 
-Building must be done on a fnOS environment (the NAS) and depends on the `nodejs_v24` runtime and Go (only needed the first time to compile gh-mirror).
+Building must be done on a fnOS environment (the NAS) and depends on the `nodejs_v24` runtime and Go (only needed the first time to compile gh-proxy).
 
 ```bash
 # Build the .fpk: automatically handles version detection, source/kernel download,
@@ -83,7 +82,7 @@ cd develop && bash build.sh
 
 Full `build.sh` workflow:
 
-1. Inject PATH (`nodejs_v24` node/pnpm + gh-mirror)
+1. Inject PATH (`nodejs_v24` node/pnpm + gh-proxy)
 2. Detect the metacubexd version; download source on demand and establish a git baseline
 3. Detect the mihomo version; download the kernel on demand
 4. `pnpm install` dependencies

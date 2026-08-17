@@ -1,0 +1,117 @@
+# Scheduled upstream follow: auto-release when MetaCubeX/metacubexd (and/or
+# mihomo) publishes a new version.
+#
+# Runs daily. Compares upstream latest tags with the version pinned in
+# src/manifest (panel) and the recorded mihomo kernel version; when a newer
+# upstream exists, builds FIRST and only then (on success) bumps the manifest,
+# pushes a bump commit + tag for the record and creates the Release with the
+# fpk. If the build breaks (fnos.patch --3way cannot auto-adapt to an
+# upstream refactor), nothing is pushed or tagged — main stays clean and the
+# next run retries; a human then regenerates fnos.patch per patches/README.md.
+#
+# No PAT needed: everything (commit, tag, Release) uses the workflow's own
+# GITHUB_TOKEN. The bump commit is pushed WITHOUT --follow-tags: the Release
+# step creates the tag via the API (softprops), and API-created tags do not
+# fire push events — so release.yml's tag trigger never double-fires.
+name: auto-follow
+
+on:
+  schedule:
+    - cron: '23 21 * * *'   # 21:23 UTC daily = 05:23 Asia/Shanghai, off the hour
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-follow
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check upstream
+    runs-on: ubuntu-latest
+    outputs:
+      latest_panel: ${{ steps.cmp.outputs.latest_panel }}
+      latest_kernel: ${{ steps.cmp.outputs.latest_kernel }}
+      pinned_panel: ${{ steps.cmp.outputs.pinned_panel }}
+      pinned_kernel: ${{ steps.cmp.outputs.pinned_kernel }}
+      changed: ${{ steps.cmp.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare upstream latest with pinned versions
+        id: cmp
+        run: |
+          latest_panel="$(curl -fsSL https://api.github.com/repos/MetaCubeX/metacubexd/releases/latest \
+            | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -1)"
+          latest_kernel="$(curl -fsSL https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
+            | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -1)"
+          pinned_panel="$(sed -n 's/^version=//p' src/manifest | head -1 | tr -d '[:space:]')"
+          # kernel version is recorded in dist artifact metadata; recover from
+          # the latest CHANGELOG banner line "kernel mihomo vX.Y.Z" if present,
+          # else fall back to the manifest panel version marker file.
+          pinned_kernel="$(sed -n 's/^mihomo=//p' .upstream-versions 2>/dev/null | head -1 | tr -d '[:space:]')"
+          if [ -z "$pinned_kernel" ]; then
+            pinned_kernel="$(grep -oE 'mihomo v[0-9.]+' CHANGELOG.md | head -1 | sed 's/mihomo v//')"
+          fi
+
+          changed=no
+          if [ "$latest_panel" != "$pinned_panel" ] || [ "$latest_kernel" != "$pinned_kernel" ]; then
+            changed=yes
+          fi
+          echo "latest_panel=$latest_panel"   >> "$GITHUB_OUTPUT"
+          echo "latest_kernel=$latest_kernel" >> "$GITHUB_OUTPUT"
+          echo "pinned_panel=$pinned_panel"   >> "$GITHUB_OUTPUT"
+          echo "pinned_kernel=$pinned_kernel" >> "$GITHUB_OUTPUT"
+          echo "changed=$changed"             >> "$GITHUB_OUTPUT"
+          echo "panel: latest=$latest_panel pinned=$pinned_panel"
+          echo "kernel: latest=$latest_kernel pinned=$pinned_kernel"
+          echo "changed: $changed"
+
+  build:
+    name: build new upstream
+    needs: check
+    if: needs.check.outputs.changed == 'yes'
+    uses: ./.github/workflows/build-fpk.yml
+    with:
+      appver: ${{ needs.check.outputs.latest_panel }}
+      upstream: ${{ needs.check.outputs.latest_panel }}
+      mihomo: ${{ needs.check.outputs.latest_kernel }}
+
+  release:
+    name: bump, tag, publish
+    needs: [check, build]
+    if: needs.check.outputs.changed == 'yes'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git identity
+        run: |
+          git config user.name "metacubexd-release-bot"
+          git config user.email "actions@github.com"
+
+      - name: Bump manifest + record versions
+        run: |
+          panel="${{ needs.check.outputs.latest_panel }}"
+          kernel="${{ needs.check.outputs.latest_kernel }}"
+          sed -i "s/^version=.*/version=${panel}/" src/manifest
+          printf 'metacubexd=%s\nmihomo=%s\n' "$panel" "$kernel" > .upstream-versions
+          git add src/manifest .upstream-versions
+          git commit -q -m "chore: follow upstream metacubexd v${panel} + mihomo v${kernel} (auto)"
+          git push origin HEAD:main
+          # tag is NOT pushed here: the release step below creates it via API
+          # (API tag creation fires no push event → no release.yml double-run)
+
+      - name: Download fpk artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-all
+
+      - name: Create release with fpk
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check.outputs.latest_panel }}
+          files: dist-all/metacubexd-fpk/*
+          generate_release_notes: true

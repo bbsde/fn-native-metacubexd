@@ -1,5 +1,5 @@
 appname=metacubexd
-version=1.271.0
+version=1.273.0
 display_name=魔方面板
 desc=飞牛 fnOS 原生代理面板，内置 mihomo（Clash.Meta）内核，面板与内核一体化运行。<br>● 多订阅管理，一键导入切换，支持定时自动更新<br>● 可视化配置编辑（Monaco YAML + 图形化编辑器）<br>● 内核启停 / 重启 / 回滚，面板内一键操作<br>● 走 fnOS 统一网关，支持 WebSocket，远程（frp / FN Connect）可用<br>● 飞牛应用窗口直接打开，免输入地址和密码
 maintainer=MetaCubeX

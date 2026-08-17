@@ -1,0 +1,82 @@
+# Manual tag-driven fpk release.
+#
+# The git tag is the single version source:
+#   git tag v1.273.0 && git push --tags
+#     -> builds the fpk on an overseas runner
+#     -> creates a GitHub Release with the fpk attached
+#
+# Tag format: v<metacubexd-version> (manifest version = upstream version).
+# The mihomo kernel version is resolved from the LATEST upstream release at
+# build time (kernel tracking is independent of the panel version).
+#
+# Pushes to main do NOT build. Scheduled upstream follows live in
+# auto-follow.yml; the heavy lifting lives in the reusable build-fpk.yml.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      appver:
+        description: 'fpk version = metacubexd version (no v, e.g. 1.273.0)'
+        required: true
+      mihomo:
+        description: 'mihomo kernel version (no v, e.g. 1.19.30). Empty = latest'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    name: resolve versions
+    runs-on: ubuntu-latest
+    outputs:
+      appver: ${{ steps.ver.outputs.appver }}
+      mihomo: ${{ steps.ver.outputs.mihomo }}
+    steps:
+      - name: Resolve versions from tag / inputs
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            appver='${{ github.event.inputs.appver }}'
+            mihomo='${{ github.event.inputs.mihomo }}'
+          else
+            appver="${GITHUB_REF_NAME#v}"
+          fi
+          if [ -z "$mihomo" ]; then
+            mihomo="$(curl -fsSL https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
+              | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -1)"
+          fi
+          echo "appver=$appver" >> "$GITHUB_OUTPUT"
+          echo "mihomo=$mihomo" >> "$GITHUB_OUTPUT"
+          echo "resolved: appver=$appver mihomo=$mihomo"
+
+  build:
+    name: build
+    needs: resolve
+    uses: ./.github/workflows/build-fpk.yml
+    with:
+      appver: ${{ needs.resolve.outputs.appver }}
+      upstream: ${{ needs.resolve.outputs.appver }}
+      mihomo: ${{ needs.resolve.outputs.mihomo }}
+
+  release:
+    name: release
+    needs: [resolve, build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download fpk artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-all
+
+      - name: Create release with fpk
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.resolve.outputs.appver }}
+          files: dist-all/metacubexd-fpk/*
+          generate_release_notes: true

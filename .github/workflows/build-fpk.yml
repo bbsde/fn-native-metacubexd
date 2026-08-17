@@ -1,0 +1,165 @@
+# Reusable fpk build. Called by release.yml (manual tag) and auto-follow.yml
+# (scheduled upstream follow). Produces the fpk artifact; publishing is the
+# caller's job.
+#
+# Overseas runner: NO mirrors/proxies — upstream tarball, mihomo release
+# asset, Google Fonts (upstream default provider) and npm registry are all
+# directly reachable. The local-NAS workarounds (gh-proxy, fonts patch,
+# esbuild chmod) do not apply here by design.
+name: build-fpk
+
+on:
+  workflow_call:
+    inputs:
+      appver:
+        required: true
+        type: string
+        description: 'fpk version = upstream metacubexd version (no v)'
+      upstream:
+        required: true
+        type: string
+        description: 'upstream metacubexd version (no v)'
+      mihomo:
+        required: true
+        type: string
+        description: 'mihomo kernel version (no v)'
+
+env:
+  FNPACK_VERSION: '1.2.3'
+
+jobs:
+  build:
+    name: build fpk (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+
+      - name: Install fnpack
+        run: |
+          curl -fsSL -o /usr/local/bin/fnpack \
+            "https://static2.fnnas.com/fnpack/fnpack-${FNPACK_VERSION}-linux-amd64"
+          chmod +x /usr/local/bin/fnpack
+
+      # ---- Step 1/7: fetch upstream source, git baseline ----
+      # Fresh disposable tree per build: upstream checkout + baseline commit.
+      # core.autocrlf=false keeps patch context byte-exact.
+      - name: Fetch metacubexd source and create git baseline
+        env:
+          XD_VER: ${{ inputs.upstream }}
+        run: |
+          mkdir -p build && cd build
+          curl -fsSL -o src.tar.gz \
+            "https://github.com/MetaCubeX/metacubexd/archive/refs/tags/v${XD_VER}.tar.gz"
+          mkdir -p metacubexd
+          tar xzf src.tar.gz -C metacubexd --strip-components=1
+          cd metacubexd
+          git init -q
+          git config core.autocrlf false
+          git config core.safecrlf false
+          printf 'node_modules/\n.output/\n.nuxt/\ndist/\ndist-electron/\n*.log\n' > .gitignore
+          git add -A
+          git -c user.name=build -c user.email=build@local -c commit.gpgsign=false \
+            commit -q -m "baseline: metacubexd v${XD_VER} (upstream)"
+
+      # ---- Step 2/7: fetch mihomo kernel ----
+      - name: Fetch mihomo kernel
+        env:
+          MIHOMO_VER: ${{ inputs.mihomo }}
+        run: |
+          mkdir -p src/app/bin
+          curl -fsSL -o mihomo.gz \
+            "https://github.com/MetaCubeX/mihomo/releases/download/v${MIHOMO_VER}/mihomo-linux-amd64-v1-v${MIHOMO_VER}.gz"
+          gunzip -c mihomo.gz > src/app/bin/mihomo
+          chmod +x src/app/bin/mihomo
+          # Hard assertions: ELF x86-64 + version string echo
+          file src/app/bin/mihomo | grep -q 'ELF 64-bit.*x86-64' \
+            || { echo '✗ mihomo is not a linux x86-64 ELF'; exit 1; }
+          src/app/bin/mihomo -v | head -1
+
+      # ---- Step 3/7: pnpm install ----
+      - name: pnpm install
+        working-directory: build/metacubexd
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # ---- Step 4/7: inject patches ----
+      # tar-pipe (NEVER bare cp): paths contain glob chars like [...].ts that
+      # silently mis-expanded and clobbered upstream's identically-named SPA
+      # fallback route in a live local build. Post-inject content assertions
+      # guard against silent injection loss.
+      - name: Inject patches (fnos.patch + files/)
+        working-directory: build/metacubexd
+        run: |
+          set -eux
+          git apply --3way ../../patches/fnos.patch
+
+          # pre-flight: refuse to overwrite existing upstream files
+          ( cd ../../patches/files && find . -type f ) | while read -r f; do
+            if [ -e "$f" ]; then echo "✗ target exists, refusing: $f"; exit 1; fi
+          done
+          # tar-pipe injection: no glob expansion, preserves [...].ts verbatim
+          ( cd ../../patches/files && tar cf - . ) | tar xf -
+
+          # post-inject content assertions (catch wrong-place/missing files)
+          # NOTE: every path containing [...].ts MUST be quoted — bare globs
+          # mis-expand (this exact bug clobbered the upstream SPA fallback).
+          test -f apps/server/middleware/00.gateway.ts
+          test -f apps/server/plugins/shutdown-kernel.ts
+          test -f apps/server/plugins/clash-proxy-ws.ts
+          test -f 'apps/server/routes/clash-api/[...].ts'
+          grep -q GATEWAY_PREFIX apps/server/middleware/00.gateway.ts
+          grep -q CLASH_API_PORT 'apps/server/routes/clash-api/[...].ts'
+          grep -q 'testingcf.jsdelivr.net' packages/agent/src/kernel/geo.ts
+          grep -q 'location.pathname' packages/ui/composables/useControlApi.ts
+          echo '✓ patches injected and asserted'
+
+      # ---- Step 5/7: build server ----
+      - name: Build server (Nitro)
+        working-directory: build/metacubexd
+        run: |
+          pnpm build:server
+          # assert injected server files made it into the bundle
+          grep -rq GATEWAY_PREFIX apps/server/.output/server/ \
+            || { echo '✗ gateway middleware missing from server bundle'; exit 1; }
+          grep -rq CLASH_API_PORT apps/server/.output/server/ \
+            || { echo '✗ clash-api proxy missing from server bundle'; exit 1; }
+
+      # ---- Step 6/7: build ui ----
+      - name: Build ui (Nuxt)
+        working-directory: build/metacubexd
+        env:
+          NUXT_APP_BASE_URL: './'
+        run: pnpm build:ui
+
+      # ---- Step 7/7: stage artifacts + fnpack ----
+      - name: Stage artifacts and fnpack
+        env:
+          APPVER: ${{ inputs.appver }}
+        run: |
+          set -eux
+          rm -rf src/app/server src/app/www
+          mkdir -p src/app/server dist
+          cp -r build/metacubexd/apps/server/.output/server/. src/app/server/
+          cp -r build/metacubexd/packages/ui/.output/public/. src/app/www/
+          sed -i "s/^version=.*/version=${APPVER}/" src/manifest
+
+          (cd src && fnpack build)
+          mv -f src/*.fpk dist/
+          printf 'app: %s\nmetacubexd: v%s\nmihomo: v%s\narch: x86_64\nbuilt: %s\n' \
+            "${APPVER}" "${{ inputs.upstream }}" "${{ inputs.mihomo }}" \
+            "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" > dist/metacubexd.fpk.info.txt
+          ls -la dist/
+
+      - name: Upload fpk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: metacubexd-fpk
+          path: dist/*
+          if-no-files-found: error

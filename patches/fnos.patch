@@ -1,0 +1,106 @@
+diff --git a/packages/agent/src/kernel/geo.ts b/packages/agent/src/kernel/geo.ts
+index 4dc7a0a..a273dc8 100644
+--- a/packages/agent/src/kernel/geo.ts
++++ b/packages/agent/src/kernel/geo.ts
+@@ -9,13 +9,14 @@ import { join } from 'node:path'
+  * geoip.dat / geosite.dat / country.mmdb all ship from meta-rules-dat's rolling
+  * `latest` release, which is the source mihomo documents for its default geodata.
+  */
++// fnOS: GitHub releases 国内不可达，改用 jsdelivr CDN 镜像（MetaCubeX/meta-rules-dat release 分支）
+ export const GEO_ASSET_URLS = {
+   'geoip.dat':
+-    'https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat',
++    'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat',
+   'geosite.dat':
+-    'https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat',
++    'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat',
+   'country.mmdb':
+-    'https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb',
++    'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb',
+ } as const
+ 
+ export type GeoAssetFile = keyof typeof GEO_ASSET_URLS
+diff --git a/packages/ui/components/Sidebar.vue b/packages/ui/components/Sidebar.vue
+index 5d5a237..e8efd0e 100644
+--- a/packages/ui/components/Sidebar.vue
++++ b/packages/ui/components/Sidebar.vue
+@@ -196,6 +196,18 @@ async function onRestartCore() {
+   // Restarting drops every active connection — guard the one-click action with a
+   // confirm (matches traffic.vue's confirm() pattern for destructive ops).
+   if (!window.confirm(t('restartCoreConfirm'))) return
++  // 托管模式（server/desktop，hasAgent）走 agent/supervisor 的 stop+start，
++  // 保证 mihomo 进程真正重启（新 PID）；纯 web dashboard 退回 mihomo 自带 /restart。
++  if (hasAgent.value) {
++    try {
++      await useControlApi().restartKernel()
++    } catch {
++      return
++    }
++    // #2057: refresh once the core is back so the UI reconnects to the new process.
++    window.location.reload()
++    return
++  }
+   // #2057: refresh once the core is back so the UI reconnects to the new process.
+   if (await configActions.restartBackendAPI()) window.location.reload()
+ }
+diff --git a/packages/ui/composables/useControlApi.ts b/packages/ui/composables/useControlApi.ts
+index 0c683d2..98c3bef 100644
+--- a/packages/ui/composables/useControlApi.ts
++++ b/packages/ui/composables/useControlApi.ts
+@@ -50,15 +50,18 @@ export function resolveControlConfig(): ControlConfig {
+   if (bridge?.base) {
+     return { base: stripTrailingSlash(bridge.base), token: bridge.token }
+   }
+-  const origin =
+-    typeof window !== 'undefined' && window.location?.origin
+-      ? window.location.origin
+-      : ''
++  const loc = typeof window !== 'undefined' ? window.location : undefined
++  const origin = loc?.origin ?? ''
++  // 包含挂载路径 pathname，使 fnOS 统一网关 /app/{appname} 子路径部署时 API 调用
++  // 落在前缀下（网关不剥离前缀）。根路径部署时 pathname='/'，base 与原 origin-only 一致。
++  let mountPath = loc?.pathname ?? '/'
++  if (!mountPath.startsWith('/')) mountPath = '/' + mountPath
++  mountPath = mountPath.replace(/\/+$/, '')
+   // All-in-One server mode: the dashboard is served same-origin with the agent,
+   // and the server injects CONTROL_TOKEN into config.js so control unlocks
+   // automatically (#2074). Plain static deploys leave controlToken undefined.
+   const token = w?.__METACUBEXD_CONFIG__?.controlToken || undefined
+-  return { base: `${stripTrailingSlash(origin)}/api/control`, token }
++  return { base: `${origin}${mountPath}/api/control`, token }
+ }
+ 
+ function stripTrailingSlash(s: string): string {
+diff --git a/packages/ui/stores/endpoint.ts b/packages/ui/stores/endpoint.ts
+index 2afbe9e..aa1224a 100644
+--- a/packages/ui/stores/endpoint.ts
++++ b/packages/ui/stores/endpoint.ts
+@@ -14,6 +14,14 @@ export const useEndpointStore = defineStore('endpoint', () => {
+   const wsEndpointURL = computed(() => {
+     const endpoint = currentEndpoint.value
+     if (!endpoint) return ''
++    // fnOS: 以 / 开头的相对路径（如 /app/metacubexd/clash-api），
++    // 用当前 origin 补全，协议 http->ws / https->wss
++    if (endpoint.url.startsWith('/')) {
++      const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
++      const host = typeof window !== 'undefined' ? window.location.host : ''
++      const base = `${proto}//${host}${endpoint.url}`
++      return base.endsWith('/') ? base.slice(0, -1) : base
++    }
+     try {
+       const parsed = new URL(endpoint.url)
+       if (parsed.protocol === 'http:') parsed.protocol = 'ws:'
+diff --git a/packages/ui/utils/index.ts b/packages/ui/utils/index.ts
+index 610c91b..bf77239 100644
+--- a/packages/ui/utils/index.ts
++++ b/packages/ui/utils/index.ts
+@@ -120,6 +120,9 @@ export function formatBytes(bytes: number) {
+ 
+ // URL helpers
+ export function transformEndpointURL(url: string) {
++  // fnOS: 以 / 开头的相对路径（如 /app/metacubexd/clash-api）直接返回，
++  // 让浏览器用当前 origin + 相对路径访问，不补 protocol
++  if (url.startsWith('/')) return url
+   return url.startsWith('http://') || url.startsWith('https://')
+     ? url
+     : `${typeof window !== 'undefined' ? window.location.protocol : 'http:'}//${url}`

@@ -2,7 +2,7 @@
 
 本文件为 AI agent 提供本项目的工作指南：项目定位、目录结构、打包注意事项、发布前需要更新的信息，以及标准发布流程。
 
-> 本项目是飞牛 fnOS 第三方应用打包项目。**不修改任何上游源码逻辑**，所有改动通过 `develop/patch/` 下的补丁在构建时注入。
+> 本项目是飞牛 fnOS 第三方应用打包项目。**不修改任何上游源码逻辑**，所有改动通过 `patches/` 下的补丁在构建时注入。
 
 ---
 
@@ -38,11 +38,12 @@
 │   │   ├── www/             #     ⚠️ 构建产物（.gitignore，不入库）
 │   │   └── bin/             #     ⚠️ mihomo（.gitignore，不入库）
 │   └── ICON.PNG / ICON_256.PNG
-├── develop/                 # 开发与构建环境
-│   ├── build.sh             #   一键构建脚本（见下「打包流程」）
-│   ├── gh-proxy             #   GitHub 镜像加速下载工具（Go 二进制，内嵌默认镜像源）
-│   ├── patch/               #   上游源码补丁 + 新增文件 —— fnOS 适配的核心
-│   └── versions             #   上游版本记录 —— ⚠️ 构建时自动更新
+├── patches/                  # fnOS 适配补丁（详见 patches/README.md）—— fnOS 适配的核心
+│   ├── files/                #   A 类：新增文件（上游不存在），按原路径复制进源码树
+│   └── fnos.patch            #   B+C 类：修改类补丁（UI 子路径分支 ×4 + geo 镜像）
+├── develop/                  # 仅保留资源（无构建脚本）
+│   ├── ICON.ai               #   图标源文件
+│   └── metacubexd/           #   本地探索用上游源码树（.gitignore，不入库）
 ├── README.md / README.en.md # 中英文说明
 ├── CHANGELOG.md             # 上游版本更新日志
 └── AGENTS.md                # 本文件
@@ -50,56 +51,54 @@
 
 ### 补丁机制（重要）
 
-本项目**不 fork 上游**，所有 fnOS 适配改动以补丁形式存在 `develop/patch/`：
+本项目**不 fork 上游**，所有 fnOS 适配改动集中在仓库根 `patches/`（详见 `patches/README.md`）：
 
-- `*.patch`：通过 `patch -p1` 应用到解压后的上游源码树
-- `patch/files/**`：新增文件整体覆盖进源码树（如 `clash-api` 反代路由、`clash-proxy-ws` 插件、UI 侧的网关前缀/端点适配等）
+- `patches/fnos.patch`：**修改类**补丁（git diff 格式），`git apply --3way` 应用。含 4 处 UI 子路径分支（上游不支持 `/app/{appname}` 子路径部署的缺口）+ geo 资源 URL 换 jsdelivr 镜像（国内运行时可达性，必须保留）
+- `patches/files/**`：**新增文件**（上游不存在），整体复制进源码树。含网关前缀剥离中间件、clash-api HTTP/WS 反代、server 退出停内核插件
 
-`build.sh` 每次都会先用 git 把源码树恢复到干净的 baseline，再从头打补丁，保证补丁干净应用、无需幂等判断。**若上游重构导致补丁上下文不匹配，构建会在「应用补丁」步骤失败（`✗ 应用失败（上下文不匹配）`），此时需手动更新对应 `.patch` 文件。**
+上游重构导致 `--3way` 无法自动适配时会显式失败，按 `patches/README.md` 的流程在新树上重做改动后 `git diff` 重新生成。
 
-### 两条构建路径（勿混淆）
+### 构建路径（勿混淆）
 
-| 路径 | 脚本 | 执行位置 | 用途 |
-|------|------|---------|------|
-| **开发打包** | `develop/build.sh` | fnOS NAS（develop 目录） | 产出 `.fpk`，产物（server/www/bin）打进 fpk |
-| **升级回调** | `src/cmd/upgrade_callback` | fnOS NAS（用户升级时） | **空实现** —— 面板产物随 fpk 部署自动覆盖，无需重建；运行时数据（profiles/active.yaml）在 appshare 不受影响 |
+| 路径 | 执行位置 | 用途 |
+|------|---------|------|
+| **正式构建** | GitHub Actions（境外 runner，规划中） | 拉上游源码 → 注入 patches → pnpm 编译 → fnpack → Release。字体走上游默认 google provider（runner 直连通畅），无需补丁 |
+| **升级回调** | fnOS NAS（用户升级时） | **空实现** —— 面板产物随 fpk 部署自动覆盖，无需重建；运行时数据（profiles/active.yaml）在 appshare 不受影响 |
 
-开发打包走 gh-proxy 下载 + 补丁 + pnpm 构建。升级回调现已是空壳，不再拉源码（新版面板直接打进 fpk，升级即生效）。
+本地仓库**不再保留构建脚本**（原 `develop/build.sh`、`develop/auto-update.sh` 已删除），构建逻辑由 GitHub Actions workflow 承接。
 
 ---
 
 ## 打包注意事项
 
-### 必须在 fnOS NAS 上构建
+### 构建环境（GitHub Actions）
 
-`develop/build.sh` 依赖 fnOS 环境的 `fnpack`、`nodejs_v24` 运行时，**不能在开发机（Windows）上直接打包**。标准操作：
+正式构建在 **GitHub Actions 境外 runner** 上执行（workflow 规划中，模型参照 fn-native-deepseek-harness）：
 
-```bash
-# 在 fnOS NAS 上
-cd <repo>/develop && bash build.sh
-```
+- 拉上游 metacubexd 源码（release tag tarball）→ 解包 → git init baseline
+- 注入 `patches/`（`git apply --3way fnos.patch` + 复制 `files/`，复制前校验目标不存在）
+- 下载 mihomo 内核（`mihomo-linux-amd64-v1`，按架构）
+- pnpm install + 编译 server/ui → fnpack → `dist/*.fpk`
 
-产物输出到 `dist/*.fpk`。构建前确认：
-- `nodejs_v24` 已从应用商店安装（`build.sh` 会注入其 PATH）
-- 首次构建若需重新编译 `gh-proxy`，需要 Go 环境（仓库已带预编译二进制 `develop/gh-proxy`，通常无需重编）
+runner 直连 Google/GitHub 通畅，**字体走上游默认 google provider，无需补丁**；geo 镜像替换保留（国内**运行时**可达性问题，与构建机无关）。
 
-### build.sh 的七步流程
+### 构建七步（概念流程，CI 承接）
 
 1. 检测 metacubexd 版本 → 按需下载源码 + 建立 git baseline
 2. 检测 mihomo 版本 → 按需下载 `mihomo-linux-amd64-v1` 内核
-3. `pnpm install --frozen-lockfile --ignore-scripts`（补回原生二进制可执行位）
-4. 应用 `patch/` 补丁 + 复制 `patch/files`
+3. `pnpm install --frozen-lockfile --ignore-scripts`（NAS 场景需补回原生二进制可执行位；CI runner 无此问题）
+4. 注入 `patches/`：`git apply --3way patches/fnos.patch` + 复制 `patches/files`（防覆盖校验）
 5. 编译 server（Nitro）→ `src/app/server/`
 6. 编译 ui（`NUXT_APP_BASE_URL=./`）→ `src/app/www/`
 7. 同步 manifest version + `fnpack build` → `dist/*.fpk`
 
 ### 常见坑
 
-1. **补丁上下文不匹配**：上游改动导致 `.patch` 失败 → 手动重新生成对应补丁
-2. **NAS 共享丢可执行位**：pnpm 装在共享目录时原生二进制（esbuild）会丢执行位，`build.sh` 已用 `--ignore-scripts` + 手动 `chmod +x` 规避，勿删这段
-3. **fnpack 输出位置**：fpk 生成在「fnpack 的工作目录」（即 `develop/`），脚本已 `mv` 到 `dist/`，构建后务必确认 `dist/` 下有 fpk
-4. **打包目标用 `src/`**：`fnpack build --directory src` 只打包 fnOS 应用文件，不递归 `develop/metacubexd` 的坏 symlink（如 `@electron/fuses`），**不要改成打包仓库根**
-5. **mihomo 版本与 manifest**：`build.sh` 只同步 metacubexd 版本到 manifest，mihomo 版本记录在 `develop/versions`，二者独立
+1. **补丁失配**：上游重构导致 `--3way` 无法自动适配 → 按 `patches/README.md` 流程在新树重做改动并 `git diff` 重新生成 `fnos.patch`
+2. **fnpack 输出位置**：fpk 生成在「fnpack 的工作目录」而非 `--directory`，构建后务必确认产物被移动到 `dist/`
+3. **打包目标用 `src/`**：`fnpack build --directory src` 只打包 fnOS 应用文件，不递归源码树的坏 symlink，**不要改成打包仓库根**
+4. **clash-proxy-ws 静默失效风险**：它 monkey-patch `HttpServer.prototype.listen` 捕获 Nitro unix-socket 模式的 server 实例，上游升级 Nitro 可能改变该行为且**构建期不报错**——每次升级后必须验证面板 traffic/logs 的 WebSocket 出数
+5. **mihomo 版本与 manifest**：manifest version 只跟 metacubexd 版本，mihomo 版本记录在 CI 构建产物元数据（.info.txt），二者独立
 
 ---
 
@@ -111,7 +110,7 @@ cd <repo>/develop && bash build.sh
 
 | 字段 | 说明 | 何时更新 |
 |------|------|---------|
-| `version` | 应用版本，**等于 metacubexd 版本**（去 `v`） | `build.sh` 会自动同步，但发布前需核对与 metacubexd 实际版本一致 |
+| `version` | 应用版本，**等于 metacubexd 版本**（去 `v`） | CI 构建时同步，发布前需核对与 metacubexd 实际版本一致 |
 | `desc` | 应用描述（`<br>` 分行） | 架构/特性有变化时手动更新，保持「MetaCubeXD 为主」表述 |
 | `changelog` | 本版更新说明 | **每次发布必改** —— 见下「changelog 编写规范」 |
 | `maintainer` / `maintainer_url` | 上游 = `MetaCubeX` / metacubexd 仓库 | 一般不动 |
@@ -142,13 +141,9 @@ curl -sL "https://api.github.com/repos/MetaCubeX/metacubexd/releases/tags/v1.270
 
 **CHANGELOG.md 格式**：顶部维护「当前打包版本」横幅；新增条目用 `## [version] - YYYY-MM-DD`，分「面板」「内核」两块，再细分 新特性/修复/维护，附 commit/PR 链接。新版本加在最上面。
 
-### 3. `develop/versions`
+### 3. 版本记录
 
-记录当前打包的上游版本。`build.sh` 构建时会自动更新，**一般不用手动改**。但发布前可核对：
-```
-mihomo=1.19.29
-metacubexd=1.270.6
-```
+上游版本不再由 `develop/versions` 记录（已删除）。当前打包版本以 `src/manifest` 的 `version`（= metacubexd 版本）与 `CHANGELOG.md` 顶部横幅为准；mihomo 版本见 `CHANGELOG.md` 对应条目。
 
 ### ⚠️ 4. 文档同步
 
@@ -175,21 +170,15 @@ https://img.shields.io/badge/内核-mihomo%20v1.19.29-blue
 ### 1. 确认上游版本
 
 ```bash
-# 查看上游最新版本（在 NAS 上，用 gh-proxy）
-cd <repo>/develop
-./gh-proxy latest-tag MetaCubeX/metacubexd
-./gh-proxy latest-tag MetaCubeX/mihomo
+curl -sL "https://api.github.com/repos/MetaCubeX/metacubexd/releases/latest" | grep tag_name
+curl -sL "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" | grep tag_name
 ```
 
-确认与 `develop/versions` 是否一致；若上游有新版，准备更新。
+与 `src/manifest` 的 `version` / `CHANGELOG.md` 顶部横幅比对；若上游有新版，准备更新（补丁按 `patches/README.md` 流程验证/重生成）。
 
 ### 2. 构建 fpk
 
-```bash
-cd <repo>/develop && bash build.sh
-```
-
-构建会自动检测上游版本、按需下载、打补丁、编译、打包。**若补丁失败需先修复补丁再继续。** 确认 `dist/` 下生成了新的 `.fpk`。
+由 GitHub Actions workflow 执行（tag 触发或手动 dispatch），流程即上文「构建七步」。**若补丁注入失败需先按 `patches/README.md` 重新生成 `fnos.patch` 再重跑。** 确认 `dist/` 下生成了新的 `.fpk`。
 
 ### 3. 更新 changelog（基于真实上游 release notes）
 
@@ -208,7 +197,7 @@ cd <repo>/develop && bash build.sh
 在 fnOS 上本地安装新 fpk，验证：
 - 应用能正常启动（桌面打开 MetaCubeXD 进入面板）
 - 多订阅导入、内核启停、配置编辑等功能正常
-- 远程访问（frp / FN Connect）WebSocket 正常
+- 远程访问（frp / FN Connect）WebSocket 正常（同时覆盖 clash-proxy-ws 的静默失效风险）
 - 升级路径正确（从旧版升级，用户数据/profiles 保留）
 
 ### 6. 提交并打 tag
@@ -217,21 +206,24 @@ cd <repo>/develop && bash build.sh
 git add -A
 git commit -m "release: v{version}"
 git tag v{version}
-git push origin master --tags
+git push origin main --tags
 ```
 
-### 7. 上传 fpk 到发行版
+### 7. 发布 fpk 到发行版
 
-在 Gitee（`https://gitee.com/rexond/fn-native-metacubexd`）创建 Release，上传 `dist/*.fpk`，Release 说明引用 `CHANGELOG.md` 对应条目。
+GitHub Actions 自动创建 Release 并上传 `dist/*.fpk`（仓库托管于
+`https://github.com/bbsde/fn-native-metacubexd`，主分支 `main`），
+Release 说明引用 `CHANGELOG.md` 对应条目。
 
 ---
 
 ## 关键约定速查
 
 - **应用主体是 MetaCubeXD**：所有描述以 metacubexd 为主句，mihomo 为「内置内核」从属
-- **不修改上游源码**：所有适配改动走 `develop/patch/`
+- **不修改上游源码**：所有适配改动走 `patches/`（files/ 新增 + fnos.patch 修改类）
 - **version = metacubexd 版本**：去 `v` 前缀，mihomo 版本不进 manifest version
-- **只能在 fnOS NAS 上构建**：开发机不能直接产出 fpk
+- **正式构建只在 GitHub Actions**：本地仓库无构建脚本；字体无需补丁（runner 直连 Google 通畅）
 - **changelog 必须来自上游真实 release notes**：不手写虚构内容
 - **中英文文档对齐**：README.md 和 README.en.md 结构、版本号、特性保持一致
 - **远程访问走统一网关**：免输入地址密码是核心卖点，相关 patch/逻辑改动需谨慎
+- **上游升级三查**：`git apply --3way` 是否通过、clash-proxy-ws WebSocket 是否出数、geo 镜像 URL 是否仍有效

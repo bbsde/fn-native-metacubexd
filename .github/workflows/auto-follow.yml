@@ -117,3 +117,21 @@ jobs:
           tag_name: v${{ needs.check.outputs.latest_panel }}
           files: dist-all/*.fpk
           generate_release_notes: true
+
+      # Prune legacy unversioned assets (pre-dual-platform era) if present.
+      - name: Prune legacy unversioned assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.check.outputs.latest_panel }}
+        run: |
+          release_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
+          for name in metacubexd.fpk metacubexd.fpk.info.txt; do
+            asset_id="$(echo "$release_json" | python3 -c \
+              "import json,sys; print(next((a['id'] for a in json.load(sys.stdin).get('assets',[]) if a['name']=='$name'), ''))" 2>/dev/null || true)"
+            if [ -n "$asset_id" ]; then
+              curl -fsSL -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+                && echo "pruned legacy asset: $name"
+            fi
+          done

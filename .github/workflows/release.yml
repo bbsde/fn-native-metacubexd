@@ -82,3 +82,23 @@ jobs:
           tag_name: v${{ needs.resolve.outputs.appver }}
           files: dist-all/*.fpk
           generate_release_notes: true
+          # make_latest: keep default; overwrite_files drops same-name assets
+
+      # Remove legacy fixed-name assets from earlier releases of this tag
+      # (pre-dual-platform era), so the Release only carries versioned fpks.
+      - name: Prune legacy unversioned assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.resolve.outputs.appver }}
+        run: |
+          release_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
+          for name in metacubexd.fpk metacubexd.fpk.info.txt; do
+            asset_id="$(echo "$release_json" | python3 -c \
+              "import json,sys; print(next((a['id'] for a in json.load(sys.stdin).get('assets',[]) if a['name']=='$name'), ''))" 2>/dev/null || true)"
+            if [ -n "$asset_id" ]; then
+              curl -fsSL -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+                && echo "pruned legacy asset: $name"
+            fi
+          done

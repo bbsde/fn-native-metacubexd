@@ -117,7 +117,7 @@ jobs:
           grep -q GATEWAY_PREFIX apps/server/middleware/00.gateway.ts
           grep -q CLASH_API_PORT 'apps/server/routes/clash-api/[...].ts'
           grep -q 'testingcf.jsdelivr.net' packages/agent/src/kernel/geo.ts
-          grep -q 'location.pathname' packages/ui/composables/useControlApi.ts
+          grep -q 'mountPath' packages/ui/composables/useControlApi.ts
           echo '✓ patches injected and asserted'
 
       # ---- Step 5/7: build server ----

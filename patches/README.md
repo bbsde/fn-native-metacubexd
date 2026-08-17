@@ -42,6 +42,25 @@ git apply --3way patches/fnos.patch
 cp -r patches/files/. metacubexd/
 ```
 
+### ⚠️ 实测踩过的坑（CI 脚本必读）
+
+1. **`[...].ts` 是 glob 字符**：`patches/files/apps/server/routes/clash-api/[...].ts`
+   的路径含 `[...]`，在 shell 中**必须全程加引号**。实测中一次未加引号的
+   `cp` 把它展开错位成 `routes/[...].ts`，**静默覆盖了上游的 SPA fallback
+   同名文件**（内容完全不同），导致产物缺根路由。安全做法：注入用
+   `tar`/`rsync` 或 `find -print0 | xargs -0`，杜绝 glob 展开：
+   ```sh
+   ( cd patches/files && tar cf - . ) | ( cd metacubexd && tar xf - )
+   ```
+2. **防覆盖校验要按「内容级」验**：路径校验只能拦「目标已存在」，拦不住
+   「错位复制」（目标路径根本不对）。注入后应附加产物级断言：
+   `grep -r GATEWAY_PREFIX metacubexd/apps/server/middleware/` 等，或直接
+   校验 4 个文件 hash 与 `patches/files/` 一致。
+3. **注入时机**：`git apply` + `files/` 复制必须在 **pnpm install 之后、
+   build 之前**或 install 之前均可（Nitro 编译时读源码树），但**任何
+   `git clean`/`git checkout -- .` 都会清掉 untracked 的注入文件**——
+   恢复 baseline 后必须重新完整注入，不能只重打 fnos.patch。
+
 ## 上游升级时重新生成 fnos.patch
 
 1. 拉新版源码，建 baseline commit

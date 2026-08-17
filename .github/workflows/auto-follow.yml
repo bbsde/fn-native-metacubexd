@@ -108,10 +108,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist-all
+          pattern: metacubexd-fpk-*
+          merge-multiple: true
 
-      - name: Create release with fpk
+      - name: Create release with fpks (x86 + arm)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.check.outputs.latest_panel }}
-          files: dist-all/metacubexd-fpk/*
+          files: dist-all/*.fpk
           generate_release_notes: true

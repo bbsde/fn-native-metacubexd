@@ -29,8 +29,24 @@ env:
 
 jobs:
   build:
-    name: build fpk (x86_64)
-    runs-on: ubuntu-latest
+    name: build fpk (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            fnpack_platform: linux-amd64
+            fnos_platform: x86
+            mihomo_asset: mihomo-linux-amd64-v1
+            elf_machine: 'x86-64'
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            fnpack_platform: linux-arm
+            fnos_platform: arm
+            mihomo_asset: mihomo-linux-arm64
+            elf_machine: 'ARM aarch64'
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +61,7 @@ jobs:
       - name: Install fnpack
         run: |
           curl -fsSL -o /usr/local/bin/fnpack \
-            "https://static2.fnnas.com/fnpack/fnpack-${FNPACK_VERSION}-linux-amd64"
+            "https://static2.fnnas.com/fnpack/fnpack-${FNPACK_VERSION}-${{ matrix.fnpack_platform }}"
           chmod +x /usr/local/bin/fnpack
 
       # ---- Step 1/7: fetch upstream source, git baseline ----
@@ -69,20 +85,19 @@ jobs:
           git -c user.name=build -c user.email=build@local -c commit.gpgsign=false \
             commit -q -m "baseline: metacubexd v${XD_VER} (upstream)"
 
-      # ---- Step 2/7: fetch mihomo kernel ----
+      # ---- Step 2/7: fetch mihomo kernel (arch-specific asset) ----
       - name: Fetch mihomo kernel
         env:
           MIHOMO_VER: ${{ inputs.mihomo }}
         run: |
           mkdir -p src/app/bin
           curl -fsSL -o mihomo.gz \
-            "https://github.com/MetaCubeX/mihomo/releases/download/v${MIHOMO_VER}/mihomo-linux-amd64-v1-v${MIHOMO_VER}.gz"
+            "https://github.com/MetaCubeX/mihomo/releases/download/v${MIHOMO_VER}/${{ matrix.mihomo_asset }}-v${MIHOMO_VER}.gz"
           gunzip -c mihomo.gz > src/app/bin/mihomo
           chmod +x src/app/bin/mihomo
-          # Hard assertions: ELF x86-64 + version string echo
-          file src/app/bin/mihomo | grep -q 'ELF 64-bit.*x86-64' \
-            || { echo '✗ mihomo is not a linux x86-64 ELF'; exit 1; }
-          src/app/bin/mihomo -v | head -1
+          # Hard assertions: correct-machine ELF (arm64=aarch64 / x86-64)
+          file src/app/bin/mihomo | grep -q "ELF 64-bit.*${{ matrix.elf_machine }}" \
+            || { echo "✗ mihomo is not a ${{ matrix.arch }} ELF"; file src/app/bin/mihomo; exit 1; }
 
       # ---- Step 3/7: pnpm install ----
       - name: pnpm install
@@ -149,17 +164,18 @@ jobs:
           cp -r build/metacubexd/apps/server/.output/server/. src/app/server/
           cp -r build/metacubexd/packages/ui/.output/public/. src/app/www/
           sed -i "s/^version=.*/version=${APPVER}/" src/manifest
+          # manifest platform must match the per-arch kernel inside the fpk
+          # (x86|arm; 'all' is NOT allowed — the bundle embeds arch binaries)
+          sed -i "s/^platform=.*/platform=${{ matrix.fnos_platform }}/" src/manifest
 
           (cd src && fnpack build)
-          mv -f src/*.fpk dist/
-          printf 'app: %s\nmetacubexd: v%s\nmihomo: v%s\narch: x86_64\nbuilt: %s\n' \
-            "${APPVER}" "${{ inputs.upstream }}" "${{ inputs.mihomo }}" \
-            "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" > dist/metacubexd.fpk.info.txt
+          # fnpack emits a fixed name (metacubexd.fpk); rename with version+arch
+          mv -f src/metacubexd.fpk "dist/metacubexd_${APPVER}_${{ matrix.fnos_platform }}.fpk"
           ls -la dist/
 
       - name: Upload fpk artifact
         uses: actions/upload-artifact@v4
         with:
-          name: metacubexd-fpk
+          name: metacubexd-fpk-${{ matrix.fnos_platform }}
           path: dist/*
           if-no-files-found: error

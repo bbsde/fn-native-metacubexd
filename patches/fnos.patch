@@ -19,6 +19,21 @@ index 04b0b1f..938ed79 100644
      queryToken: (getQuery(event).token as string | undefined) ?? undefined,
      configuredToken: serverEnv().controlToken,
    })
+diff --git a/packages/agent/src/http.ts b/packages/agent/src/http.ts
+index 1b5806a..a9c2596 100644
+--- a/packages/agent/src/http.ts
++++ b/packages/agent/src/http.ts
+@@ -109,6 +109,10 @@ export function createControlRouter(deps: ControlRouterDeps): App {
+     if (!token) return true // in-process (Electron) — no network surface
+     const header = getHeader(event, 'authorization')
+     if (header === `Bearer ${token}`) return true
++    // fnOS 统一网关把 Authorization: Bearer 误判为飞牛自家会话令牌并短路
++    // （200 "invalid token"），前端控制 API 改发 X-MetaCubeXD-Token；apps/server
++    // 的 auth 中间件已同步回退读取该头，此处为 agent 路由的同一套兼容。
++    if (getHeader(event, 'x-metacubexd-token') === token) return true
+     const q = getQuery(event)
+     if (q.token === token) return true // SSE may pass ?token=
+     return false
 diff --git a/packages/agent/src/kernel/geo.ts b/packages/agent/src/kernel/geo.ts
 index 4dc7a0a..a273dc8 100644
 --- a/packages/agent/src/kernel/geo.ts

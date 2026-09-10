@@ -135,6 +135,7 @@ jobs:
           grep -q 'mountPath' packages/ui/composables/useControlApi.ts
           grep -q 'X-MetaCubeXD-Token' packages/ui/composables/useControlApi.ts
           grep -q 'x-metacubexd-token' apps/server/middleware/auth.ts
+          grep -q 'x-metacubexd-token' packages/agent/src/http.ts
           echo '✓ patches injected and asserted'
 
       # ---- Step 5/7: build server ----

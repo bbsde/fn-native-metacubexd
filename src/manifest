@@ -15,4 +15,4 @@ ctl_stop=true
 service_port=7890
 checkport=false
 os_min_version="1.1.3105"
-changelog="魔方面板 v1.273.1（上游源码 v1.273.0）+ 内核 mihomo v1.19.30<br>【打包·修复】适配飞牛统一网关：网关会把 Authorization: Bearer 头误判为飞牛会话令牌并短路（返回 200 invalid token），导致控制中心/配置文件菜单消失、内核管理与配置编辑失效——控制 API 改发自定义头 X-MetaCubeXD-Token，服务端鉴权兼容回退"
+changelog="魔方面板 v1.273.2（上游源码 v1.273.0）+ 内核 mihomo v1.19.30<br>【打包·修复】适配飞牛统一网关：网关会把 Authorization: Bearer 头误判为飞牛会话令牌并短路（返回 200 invalid token），导致控制中心/配置文件菜单消失、内核管理与配置编辑失效——控制 API 改发自定义头 X-MetaCubeXD-Token，服务端 nitro 中间件与 agent 路由两层鉴权均兼容回退"

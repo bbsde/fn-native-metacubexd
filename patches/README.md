@@ -16,7 +16,7 @@ patches/
 └── fnos.patch      # B+C 类：git diff 格式，git apply --3way 应用
 ```
 
-## fnos.patch 内容（7 文件）
+## fnos.patch 内容（8 文件）
 
 | 文件 | 类别 | 改动 |
 |---|---|---|
@@ -26,7 +26,8 @@ patches/
 | `packages/ui/stores/endpoint.ts` | B | WS endpoint 支持 `/` 开头相对路径 |
 | `packages/ui/utils/index.ts` | B | `transformEndpointURL` 相对路径直接返回 |
 | `packages/ui/components/Sidebar.vue` | B | 托管模式重启核心走 supervisor `kernel/restart`（换新 PID），非托管退回 mihomo `/restart` |
-| `apps/server/middleware/auth.ts` | B | 控制 API 鉴权：`Authorization` 缺席时回退读 `X-MetaCubeXD-Token` 头（与前端换头配套；`?token=` query 路径不变） |
+| `apps/server/middleware/auth.ts` | B | 控制 API 鉴权（第一层，nitro 中间件）：`Authorization` 缺席时回退读 `X-MetaCubeXD-Token` 头（与前端换头配套；`?token=` query 路径不变） |
+| `packages/agent/src/http.ts` | B | 控制 API 鉴权（第二层，agent 路由 `authorized()`）：同上回退读 `X-MetaCubeXD-Token`——两层都要改，只改中间件会 401 `{"error":"unauthorized"}`（24B） |
 
 字体 provider 补丁已移除：GitHub Actions runner（境外）直连 Google Fonts 通畅，
 上游 `provider: 'google'` 原样构建即可。
@@ -80,7 +81,7 @@ cp -r patches/files/. metacubexd/
   unix-socket 模式下跳过的 server 实例，**依赖 Nitro 版本行为，上游升级 Nitro
   可能静默失效**（构建期不报错）。每次升级后务必验证 traffic/logs 页面的
   WebSocket 出数。
-- fnos.patch 改动的 7 个文件若被上游重构，`--3way` 自动适配失败会显式报错，
+- fnos.patch 改动的 8 个文件若被上游重构，`--3way` 自动适配失败会显式报错，
   按上文流程重新生成。
 - 本地（Windows）应用 fnos.patch 前先确认行尾：全局 `core.autocrlf=true` 会把
   工作副本转成 CRLF 导致全量失配（仓库已加 `.gitattributes` 强制 `patches/** eol=lf`；

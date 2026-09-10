@@ -165,6 +165,25 @@ jobs:
           mkdir -p src/app/server dist
           cp -r build/metacubexd/apps/server/.output/server/. src/app/server/
           cp -r build/metacubexd/packages/ui/.output/public/. src/app/www/
+          # PWA service-worker kill switch: the upstream workbox SW precaches
+          # the app shell, so after every fpk upgrade clients keep running the
+          # STALE frontend from Cache Storage (observed 2026-09-10: the gateway
+          # auth fix was live server-side but browsers kept serving the old
+          # bundle until the SW was manually unregistered). Ship a
+          # self-unregistering stub: on the client's next sw.js update check it
+          # installs, wipes every cache, unregisters itself and claim-releases
+          # the page back to plain network loading. NAS panels don't need
+          # offline mode; upgrades must always take effect.
+          cat > src/app/www/sw.js <<'SWSTUB'
+          self.addEventListener('install', function () { self.skipWaiting() })
+          self.addEventListener('activate', function () {
+            self.clients.claim()
+            caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (key) { return caches.delete(key) }))
+            }).then(function () { return self.registration.unregister() })
+          })
+          SWSTUB
+          grep -q "registration.unregister" src/app/www/sw.js
           sed -i "s/^version=.*/version=${APPVER}/" src/manifest
           # manifest platform must match the per-arch kernel inside the fpk
           # (x86|arm; 'all' is NOT allowed — the bundle embeds arch binaries)

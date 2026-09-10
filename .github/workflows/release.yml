@@ -5,7 +5,12 @@
 #     -> builds the fpk on an overseas runner
 #     -> creates a GitHub Release with the fpk attached
 #
-# Tag format: v<metacubexd-version> (manifest version = upstream version).
+# Tag format: v<fpk-version>. Usually fpk version == upstream metacubexd
+# version, BUT local packaging releases (fnOS-gateway compat etc.) bump a
+# local patch version (e.g. v1.273.1 built from upstream v1.273.0 source):
+# the upstream SOURCE version always resolves to the repo manifest `version=`
+# (kept in lockstep with upstream by auto-follow), or the explicit `upstream`
+# dispatch input. Never assume appver == upstream source tag.
 # The mihomo kernel version is resolved from the LATEST upstream release at
 # build time (kernel tracking is independent of the panel version).
 #
@@ -19,8 +24,12 @@ on:
   workflow_dispatch:
     inputs:
       appver:
-        description: 'fpk version = metacubexd version (no v, e.g. 1.273.0)'
+        description: 'fpk version (no v, e.g. 1.273.1)'
         required: true
+      upstream:
+        description: 'upstream metacubexd source version (no v). Empty = manifest version'
+        required: false
+        default: ''
       mihomo:
         description: 'mihomo kernel version (no v, e.g. 1.19.30). Empty = latest'
         required: false
@@ -35,24 +44,38 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       appver: ${{ steps.ver.outputs.appver }}
+      upstream: ${{ steps.ver.outputs.upstream }}
       mihomo: ${{ steps.ver.outputs.mihomo }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Resolve versions from tag / inputs
         id: ver
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             appver='${{ github.event.inputs.appver }}'
+            upstream='${{ github.event.inputs.upstream }}'
             mihomo='${{ github.event.inputs.mihomo }}'
           else
             appver="${GITHUB_REF_NAME#v}"
+            upstream=''
+            mihomo=''
+          fi
+          # Upstream source version: explicit input wins, else the repo
+          # manifest (auto-follow keeps it equal to the followed upstream,
+          # so a local packaging version like 1.273.1 still builds from
+          # upstream 1.273.0 source).
+          if [ -z "$upstream" ]; then
+            upstream="$(sed -n 's/^version=//p' src/manifest | head -1 | tr -d '[:space:]')"
           fi
           if [ -z "$mihomo" ]; then
             mihomo="$(curl -fsSL https://api.github.com/repos/MetaCubeX/mihomo/releases/latest \
               | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -1)"
           fi
           echo "appver=$appver" >> "$GITHUB_OUTPUT"
+          echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
           echo "mihomo=$mihomo" >> "$GITHUB_OUTPUT"
-          echo "resolved: appver=$appver mihomo=$mihomo"
+          echo "resolved: appver=$appver upstream=$upstream mihomo=$mihomo"
 
   build:
     name: build
@@ -60,7 +83,7 @@ jobs:
     uses: ./.github/workflows/build-fpk.yml
     with:
       appver: ${{ needs.resolve.outputs.appver }}
-      upstream: ${{ needs.resolve.outputs.appver }}
+      upstream: ${{ needs.resolve.outputs.upstream }}
       mihomo: ${{ needs.resolve.outputs.mihomo }}
 
   release:

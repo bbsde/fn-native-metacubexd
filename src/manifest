@@ -15,4 +15,4 @@ ctl_stop=true
 service_port=7890
 checkport=false
 os_min_version="1.1.3105"
-changelog="魔方面板 v1.271.0 + 内核 mihomo v1.19.29<br>【面板·新特性】新增移动端快捷置顶（proxies 页面）<br>【面板·修复】新增托管规则与代理的增删改查；修复移动端文档滚动问题"
+changelog="魔方面板 v1.273.1（上游源码 v1.273.0）+ 内核 mihomo v1.19.30<br>【打包·修复】适配飞牛统一网关：网关会把 Authorization: Bearer 头误判为飞牛会话令牌并短路（返回 200 invalid token），导致控制中心/配置文件菜单消失、内核管理与配置编辑失效——控制 API 改发自定义头 X-MetaCubeXD-Token，服务端鉴权兼容回退"

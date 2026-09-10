@@ -4,7 +4,23 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
-当前打包版本：**面板 metacubexd `v1.271.0`** ＋ **内核 mihomo `v1.19.29`**
+当前打包版本：**面板 metacubexd `v1.273.0`**（打包版本 `v1.273.2`）＋ **内核 mihomo `v1.19.30`**
+
+---
+
+## [1.273.2] - 2026-09-10
+
+面板 metacubexd [`v1.273.0`](https://github.com/MetaCubeX/metacubexd/releases/tag/v1.273.0)（上游源码原样）＋ 内核 mihomo [`v1.19.30`](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.30)
+
+### 打包（fnOS 适配）
+
+#### 修复
+
+- **适配飞牛统一网关 Bearer 误判**：fnOS 网关（trim_open_gateway）会把携带 `Authorization: Bearer <token>` 的 `/app/<appname>` 请求误判为飞牛自家会话令牌去校验，失败即短路返回 HTTP 200 + 13 字节纯文本 `invalid token`，请求到不了应用——表现为控制中心/配置文件菜单消失、内核管理与配置编辑全部失效（主面板经 `clash-api` 反代不带该头，不受影响）。本地控制 API 改发自定义头 `X-MetaCubeXD-Token`，服务端 **nitro 中间件与 agent 路由两层鉴权**均兼容回退（只改一层会 401）。与 [fn-native-moviepilot](https://github.com/bbsde/fn-native-moviepilot) 的 `X-MoviePilot-Token` 方案同源。
+- **PWA Service Worker 自注销桩**：上游 workbox SW 预缓存应用壳，导致 fpk 升级后浏览器滞留旧前端（新版不生效）。构建产物中 `sw.js` 替换为自注销桩：客户端下次 sw.js 更新检查时自动清空全部缓存并注销，回退纯网络加载。
+- 相对路径 endpoint（网关部署形态）不再由前端附 `Authorization`（clash secret 由服务端反代注入）。
+
+> 面板 v1.272.x / v1.273.0 的上游累积更新见 [v1.273.0 Release Notes](https://github.com/MetaCubeX/metacubexd/releases/tag/v1.273.0)。
 
 ---
 

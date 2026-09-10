@@ -1,3 +1,24 @@
+diff --git a/apps/server/middleware/auth.ts b/apps/server/middleware/auth.ts
+index 04b0b1f..938ed79 100644
+--- a/apps/server/middleware/auth.ts
++++ b/apps/server/middleware/auth.ts
+@@ -65,9 +65,15 @@ function isWhitespace(char: string): boolean {
+ }
+ 
+ export default defineEventHandler((event) => {
++  // fnOS 统一网关把 Authorization: Bearer 误判为飞牛会话令牌并短路（200
++  // "invalid token"），前端控制 API 改发 X-MetaCubeXD-Token；Authorization
++  // 缺席时回退读取该头（合成 Bearer 语义，复用 parseBearer 与 ?token= 路径）。
++  const xdToken = getRequestHeader(event, 'x-metacubexd-token')
+   const result = isAuthorized({
+     path: event.path.split('?')[0] ?? event.path,
+-    authHeader: getRequestHeader(event, 'authorization'),
++    authHeader:
++      getRequestHeader(event, 'authorization') ||
++      (xdToken ? `Bearer ${xdToken}` : undefined),
+     queryToken: (getQuery(event).token as string | undefined) ?? undefined,
+     configuredToken: serverEnv().controlToken,
+   })
 diff --git a/packages/agent/src/kernel/geo.ts b/packages/agent/src/kernel/geo.ts
 index 4dc7a0a..a273dc8 100644
 --- a/packages/agent/src/kernel/geo.ts
@@ -43,8 +64,38 @@ index 5d5a237..e8efd0e 100644
    // #2057: refresh once the core is back so the UI reconnects to the new process.
    if (await configActions.restartBackendAPI()) window.location.reload()
  }
+diff --git a/packages/ui/composables/useApi.ts b/packages/ui/composables/useApi.ts
+index cd5d00a..64e8c8a 100644
+--- a/packages/ui/composables/useApi.ts
++++ b/packages/ui/composables/useApi.ts
+@@ -223,7 +223,10 @@ export function useRequest() {
+ 
+   const headers = new Headers()
+ 
+-  if (endpoint.secret) {
++  // fnOS: 相对路径 endpoint（统一网关 /app/{appname} 子路径部署）经 server
++  // 反代注入 secret，客户端不附 Authorization——网关会把 Bearer 头误判为
++  // 飞牛会话令牌并短路（见 useControlApi.ts 同款处理）。
++  if (endpoint.secret && !endpoint.url.startsWith('/')) {
+     headers.set('Authorization', `Bearer ${endpoint.secret}`)
+   }
+ 
+@@ -273,7 +276,12 @@ export function checkEndpointAPI(
+ ): Promise<EndpointCheckError> {
+   return ky
+     .get(url.endsWith('/') ? `${url}version` : `${url}/version`, {
+-      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
++      // fnOS: 相对路径 endpoint 经 server 反代注入 secret，不附 Authorization
++      // （网关误判 Bearer 头，见 useControlApi.ts 同款处理）。
++      headers:
++        secret && !url.startsWith('/')
++          ? { Authorization: `Bearer ${secret}` }
++          : {},
+       timeout: 5000,
+     })
+     .then(() => null)
 diff --git a/packages/ui/composables/useControlApi.ts b/packages/ui/composables/useControlApi.ts
-index 0c683d2..98c3bef 100644
+index 0c683d2..794e0b6 100644
 --- a/packages/ui/composables/useControlApi.ts
 +++ b/packages/ui/composables/useControlApi.ts
 @@ -50,15 +50,18 @@ export function resolveControlConfig(): ControlConfig {
@@ -71,6 +122,19 @@ index 0c683d2..98c3bef 100644
  }
  
  function stripTrailingSlash(s: string): string {
+@@ -68,7 +71,11 @@ function stripTrailingSlash(s: string): string {
+ export function useControlApi() {
+   const { base, token } = resolveControlConfig()
+   const headers: Record<string, string> = {}
+-  if (token) headers.Authorization = `Bearer ${token}`
++  // fnOS 统一网关把 Authorization: Bearer <token> 误判为飞牛自家会话令牌并短路
++  // （HTTP 200 + 13 字节 "invalid token"，请求根本到不了应用；token 是否 JWT
++  // 形状无关），改发自定义头。apps/server 的 auth 中间件在 Authorization 缺席
++  // 时回退读取该头。非 fnOS 部署两端同仓库发布，行为等价。
++  if (token) headers['X-MetaCubeXD-Token'] = token
+   // ky v2: use `prefix` (prefixUrl was renamed in v2). All method paths below
+   // are passed WITHOUT a leading slash so ky joins them cleanly.
+   const client = ky.create({ prefix: base, headers, timeout: 15000 })
 diff --git a/packages/ui/stores/endpoint.ts b/packages/ui/stores/endpoint.ts
 index 2afbe9e..aa1224a 100644
 --- a/packages/ui/stores/endpoint.ts

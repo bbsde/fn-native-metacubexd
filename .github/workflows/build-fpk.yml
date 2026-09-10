@@ -133,6 +133,8 @@ jobs:
           grep -q CLASH_API_PORT 'apps/server/routes/clash-api/[...].ts'
           grep -q 'testingcf.jsdelivr.net' packages/agent/src/kernel/geo.ts
           grep -q 'mountPath' packages/ui/composables/useControlApi.ts
+          grep -q 'X-MetaCubeXD-Token' packages/ui/composables/useControlApi.ts
+          grep -q 'x-metacubexd-token' apps/server/middleware/auth.ts
           echo '✓ patches injected and asserted'
 
       # ---- Step 5/7: build server ----
